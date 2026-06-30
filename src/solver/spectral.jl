@@ -69,3 +69,41 @@ function leading_eigen(E::ParaMatrix{T,S,<:Laurent}; nsample::Int=128) where {T,
     end
     return ts, λs, vs
 end
+
+"""
+    para_qr(A; N=24, order=12) -> (; Q, R, residual, isometry)
+
+Parameterized ("polynomial") QR of a tall/square Laurent `ParaMatrix` `A` (`m×n`,
+full column rank on the circle): `A = Q·R` with BOTH factors returned **as
+ParaMatrices** — `R` the analytic R-factor and `Q` **para-unitary**
+(`para(Q)·Q = I`) — not pointwise-sampled. Unlike the sampled `qr`, this is a
+genuine parameterized→parameterized factorization.
+
+The R-factor is obtained **exactly** (single parameter) as the spectral factor of
+the Gram, `para(A)·A = para(R)·R` (matrix Fejér–Riesz / Bauer), and `Q = A·R⁻¹`.
+`residual = max_θ‖A(θ) − Q(θ)R(θ)‖` and `isometry = max_θ‖para(Q)(θ)Q(θ) − I‖`
+are reported (both ≈ machine ε for well-conditioned `A`; `Q`'s accuracy is set by
+the rational-inverse `order`, which `@warn`s if it does not converge). `R` is the
+exact gauge to absorb when canonicalizing a parameterized tensor.
+"""
+function para_qr(
+    A::ParaMatrix{T,S,<:Laurent}; N::Int=24, order::Int=12, rankatol::Real=1e-8
+) where {T,S}
+    m, n = size(A)
+    m ≥ n ||
+        throw(DimensionMismatch("para_qr needs a tall/square A (m ≥ n); got $(m)×$(n)"))
+    G = para(A) * A                          # n×n para-Hermitian; PD iff A is full column rank
+    ispositive(G; tol=rankatol) || error(
+        "para_qr: A(θ) is not full column rank on the circle (the Gram para(A)·A drops below " *
+        "`rankatol`=$(rankatol)); QR with a para-unitary Q is undefined at a rank drop",
+    )
+    M = spectral_factor(G; N=N)              # G = M·para(M)
+    R = para(M)                              # ⟹ para(R)·R = M·para(M) = G  — the R-factor
+    R⁻¹ = inv(R; order=order)                # rational; @warns if the Laurent fit needs more order
+    Q = A * R⁻¹
+    Id = Matrix{complex(float(T))}(I, n, n)
+    grid = range(0, 1; length=(4N + 1))[1:(4N)]
+    residual = maximum(norm(Matrix(A(t)) - Matrix(Q(t)) * Matrix(R(t))) for t in grid)
+    isometry = maximum(norm(Matrix(Q(t))' * Matrix(Q(t)) - Id) for t in grid)
+    return (; Q=Q, R=R, residual=residual, isometry=isometry)
+end

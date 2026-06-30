@@ -72,7 +72,8 @@ export para, paraconj, parahermitianpart, isparahermitian, isparaunitary, isposi
 # eigvals/svdvals/pinv) for ParaMatrix; these are the returned objects + polar.
 export ParaEigen, ParaSVD, ParaQR, ParaLQ, ParaLU, ParaPolar, polar, numerical_rank
 # solver — spectral / equations
-export para_gram, spectral_factor, leading_eigen, lyapd, cocycle_exponent, para_solve
+export para_gram,
+    spectral_factor, para_qr, leading_eigen, lyapd, cocycle_exponent, para_solve
 # utils
 export on_circle, rank_profile, optimize!
 
