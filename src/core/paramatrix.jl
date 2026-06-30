@@ -252,7 +252,7 @@ end
     norm(A::ParaMatrix, p=2) -> Real
 
 The `L²` function norm `‖A‖ = sqrt(∫₀¹ ‖A(θ)‖_F² dθ) = sqrt(real⟨A,A⟩)` (see
-[`dot`](@ref)). For an orthonormal basis ([`Laurent`](@ref)) this is Parseval
+`dot`). For an orthonormal basis ([`Laurent`](@ref)) this is Parseval
 `sqrt(Σ‖Aₖ‖²)`; for `Fourier`/`Polynomial` the Gram supplies the weight factors.
 """
 function LinearAlgebra.norm(A::ParaMatrix, p::Real=2)
