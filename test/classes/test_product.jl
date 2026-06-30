@@ -40,3 +40,22 @@ end
     )
     @test norm(AL) ≈ l2norm_quad2(AL) rtol = 5e-3
 end
+
+@testset "multi-parameter arity is enforced (no silent scalar mis-eval)" begin
+    pc = ProductClass(Fourier(1), Laurent(-1, 1))   # 2 axes ⇒ a 2-tuple is required
+    A = ParaMatrix(
+        [ComplexF64[i == j ? 1.0 : 0.1 for i in 1:2, j in 1:2] for _ in 1:nbasis(pc)], pc
+    )
+    # a SCALAR used to silently return a garbage 1-term sum — must now error
+    @test_throws ArgumentError basis(pc, 0.2)
+    @test_throws ArgumentError A(0.2)
+    @test_throws ArgumentError A((0.2,))            # wrong length (too short)
+    @test_throws ArgumentError A((0.2, 0.3, 0.4))   # too long
+    # correct arity works, and a vector is accepted equivalently to a tuple
+    @test A((0.2, 0.3)) ≈ A([0.2, 0.3])
+    @test length(basis(pc, (0.2, 0.3))) == nbasis(pc)
+    # decomposing a multi-parameter object no longer returns silent garbage: the 1-D
+    # samplers call A(scalar), which now errors (true N-D support comes next stage)
+    @test_throws ArgumentError eigen(A)
+    @test_throws ArgumentError svd(A)
+end
