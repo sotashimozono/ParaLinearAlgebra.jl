@@ -1,9 +1,11 @@
 # solver/equations.jl — parameterized matrix equations / linear solves.
 # Return shapes follow KrylovKit: a solution plus an `info` NamedTuple.
 
-# discrete Lyapunov / Stein solve  X = A X A† + Q  (vectorized (I − Ā⊗A) x = vec Q).
-# Bounded solution exists only for ρ(A) < 1, which is checked (otherwise the result
-# is meaningless / the system is singular).
+# discrete Lyapunov / Stein solve  X = A X Aᴴ + Q  via `MatrixEquations.lyapd`
+# (O(n³) Schur / Bartels–Stewart) — its convention `A X Aᴴ − X + Q = 0` is exactly
+# ours. (The previous in-house solve formed `(I − Ā⊗A)` and was O(n⁶).)
+# A bounded solution exists only for ρ(A) < 1, which is checked first for a clear
+# domain error (otherwise `lyapd` may return a meaningless or singular result).
 function _stein_solve(A::AbstractMatrix, Q::AbstractMatrix)
     ρ = maximum(abs, eigvals(A))
     ρ < 1 || throw(
@@ -12,9 +14,7 @@ function _stein_solve(A::AbstractMatrix, Q::AbstractMatrix)
             "discrete-Lyapunov (Stein) equation has no bounded solution",
         ),
     )
-    n = size(A, 1)
-    X = reshape((I - kron(conj(A), A)) \ vec(Q), n, n)
-    return (X + X') / 2
+    return Matrix(lyapd(A, Q))
 end
 
 """

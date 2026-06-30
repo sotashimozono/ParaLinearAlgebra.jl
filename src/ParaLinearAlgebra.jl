@@ -32,6 +32,9 @@ module ParaLinearAlgebra
 using LinearAlgebra
 using ChainRulesCore
 using ChainRulesCore: rrule, NoTangent, ZeroTangent, AbstractZero, Tangent, unthunk
+# extend the ecosystem's discrete-Lyapunov solver (O(n³) Schur) rather than
+# reimplement it — `lyapd(::ParaMatrix, ::ParaMatrix)` adds the per-θ method.
+import MatrixEquations: lyapd
 
 # core: abstract interface + central type + AD
 include("core/function_class.jl")
