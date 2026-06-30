@@ -52,8 +52,8 @@ function basis end
     basis_deriv(c::FunctionClass, p, dim::Integer) -> AbstractVector
 
 The parameter derivative `dw/dp` of the weights — the primitive behind
-parameter-derivatives of any object built on `c` (Berry/quantum-geometry).
-Optional; defined by classes that are differentiable in `p`. For a
+parameter-derivatives of any object built on `c` (sensitivities; differential
+geometry of the parameterization). Optional; defined by differentiable classes. For a
 multi-parameter class ([`ProductClass`](@ref)) the partial derivative along axis
 `dim` is `basis_deriv(c, ps, dim)`; the scalar form is undefined there.
 """

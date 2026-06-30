@@ -35,9 +35,8 @@ end
 # grid (one circle per axis), so each sample point is an n-tuple and the factor is
 # the pointwise decomposition there. NOTE (Kato/Rellich): over ≥2 parameters there
 # is in general NO globally continuous/smooth choice of eigenvectors/singular
-# vectors (degeneracies = codimension-2 "diabolical points"; the obstruction is the
-# Chern number). These objects therefore promise POINTWISE correctness only — for
-# gauge-invariant geometry over a parameter manifold use the quantum-geometry tools.
+# vectors (degeneracies are codimension-2; a globally smooth gauge need not exist).
+# These objects therefore promise POINTWISE correctness only.
 _paramgrid(::FunctionClass, nsample::Int) = collect(_circle(nsample))
 function _paramgrid(pc::ProductClass, nsample::Int)
     g = _circle(nsample)

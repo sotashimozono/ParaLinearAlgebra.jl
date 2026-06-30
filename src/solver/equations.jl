@@ -35,7 +35,7 @@ end
 
 The cocycle (dynamical-shift) Lyapunov exponent: per-site log growth of the
 transfer cocycle under `θ → θ + p/q`, accumulated with rescaling for stability.
-`p/q = Fₙ/Fₙ₊₁ → 1/φ` recovers the irrational (phason) environment rate.
+`p/q = Fₙ/Fₙ₊₁ → 1/φ` recovers the irrational (golden-mean) shift rate.
 """
 function cocycle_exponent(
     E::ParaMatrix{T,S,<:Laurent}, p::Int, q::Int; θ0::Real=0.0

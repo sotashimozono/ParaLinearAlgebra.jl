@@ -3,7 +3,7 @@
 # spectrum on the torus, plus pointwise reconstruction and callable consistency.
 # (Over ≥2 parameters only POINTWISE correctness is promised — no global gauge.)
 
-# build A(s,t) = diag(z_s, z_t),  z_s = e^{2πis},  z_t = e^{2πit}  (a 2-torus character)
+# build A(s,t) = diag(z_s, z_t),  z_s = e^{2πis},  z_t = e^{2πit}  (separable diagonal modes)
 function _char2()
     pc = ProductClass(Laurent(-1, 1), Laurent(-1, 1))
     pw = powers(pc)
@@ -14,7 +14,7 @@ function _char2()
     return ParaMatrix(coeffs, pc)
 end
 
-@testset "N-D eigen: 2-torus character, known spectrum {z_s, z_t}" begin
+@testset "N-D eigen: separable diagonal modes, known spectrum {z_s, z_t}" begin
     A = _char2()
     @test A((0.2, 0.3)) ≈ ComplexF64[cispi(0.4) 0; 0 cispi(0.6)]
     F = eigen(A; nsample=6)
