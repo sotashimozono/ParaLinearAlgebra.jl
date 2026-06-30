@@ -60,9 +60,13 @@ multi-parameter class ([`ProductClass`](@ref)) the partial derivative along axis
 function basis_deriv end
 
 # single-parameter classes: only dim 1 exists
-basis_deriv(c::FunctionClass, p, dim::Integer) =
-    dim == 1 ? basis_deriv(c, p) :
-    throw(ArgumentError("$(typeof(c)) has one parameter; dim must be 1, got $dim"))
+function basis_deriv(c::FunctionClass, p, dim::Integer)
+    if dim == 1
+        basis_deriv(c, p)
+    else
+        throw(ArgumentError("$(typeof(c)) has one parameter; dim must be 1, got $dim"))
+    end
+end
 
 """
     basis_gram(c::FunctionClass) -> AbstractMatrix

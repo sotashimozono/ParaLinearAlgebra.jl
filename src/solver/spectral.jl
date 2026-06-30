@@ -37,9 +37,12 @@ function spectral_factor(G::ParaMatrix{T,S,<:Laurent}; N::Int=24) where {T,S}
         cholesky(Hermitian(Tb)).L
     catch e
         e isa LinearAlgebra.PosDefException || rethrow()
-        ispositive(G) ||
-            error("spectral_factor: G is not positive on the circle (check ispositive(G))")
-        error("spectral_factor: Toeplitz Cholesky failed though G is PSD — G is near-singular or N=$N is too small; try a larger N")
+        ispositive(G) || error(
+            "spectral_factor: G is not positive on the circle (check ispositive(G))"
+        )
+        error(
+            "spectral_factor: Toeplitz Cholesky failed though G is PSD — G is near-singular or N=$N is too small; try a larger N",
+        )
     end
     blk(a, b) = Matrix(Lc[(a * d + 1):((a + 1) * d), (b * d + 1):((b + 1) * d)])
     Mcoeffs = [blk(N, N - k) for k in 0:L]

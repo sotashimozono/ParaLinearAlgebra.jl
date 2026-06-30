@@ -14,8 +14,9 @@ struct ProductClass{TT<:Tuple} <: RingClass
 end
 ProductClass(cs::FunctionClass...) = ProductClass(cs)
 
-powers(pc::ProductClass) =
+function powers(pc::ProductClass)
     vec([CartesianIndex(t) for t in Iterators.product(map(powers, pc.classes)...)])
+end
 nbasis(pc::ProductClass) = prod(map(nbasis, pc.classes))
 
 function basis(pc::ProductClass, ps)
@@ -35,14 +36,18 @@ function basis_deriv(pc::ProductClass, ps, dim::Integer)
         d -> d == dim ? basis_deriv(pc.classes[d], ps[d]) : basis(pc.classes[d], ps[d]),
         length(pc.classes),
     )
-    return vec([prod(bs[d][I[d]] for d in eachindex(bs)) for I in CartesianIndices(map(length, bs))])
+    return vec([
+        prod(bs[d][I[d]] for d in eachindex(bs)) for I in CartesianIndices(map(length, bs))
+    ])
 end
-basis_deriv(pc::ProductClass, ps) = throw(
-    ArgumentError(
-        "ProductClass derivative is per-axis: call basis_deriv(class, ps, dim) or " *
-        "evaluate_deriv(A, ps, dim), not the scalar 2-arg form",
-    ),
-)
+function basis_deriv(pc::ProductClass, ps)
+    throw(
+        ArgumentError(
+            "ProductClass derivative is per-axis: call basis_deriv(class, ps, dim) or " *
+            "evaluate_deriv(A, ps, dim), not the scalar 2-arg form",
+        ),
+    )
+end
 
 # separable L² Gram:  M_{IJ} = ∏_d M^d_{I[d],J[d]}
 function basis_gram(pc::ProductClass)
@@ -52,13 +57,16 @@ function basis_gram(pc::ProductClass)
     n = length(pw)
     M = Matrix{Float64}(undef, n, n)
     for i in 1:n, j in 1:n
-        M[i, j] = prod(grams[d][loc[d][pw[i][d]], loc[d][pw[j][d]]] for d in eachindex(grams))
+        M[i, j] = prod(
+            grams[d][loc[d][pw[i][d]], loc[d][pw[j][d]]] for d in eachindex(grams)
+        )
     end
     return M
 end
 
-_prodclass(a::ProductClass, b::ProductClass) =
+function _prodclass(a::ProductClass, b::ProductClass)
     ProductClass(map(_prodclass, a.classes, b.classes))
+end
 
 # multi-parameter para-adjoint: negate every axis index, adjoint each block (all-Laurent)
 function para(A::ParaMatrix{T,S,<:ProductClass}) where {T,S}

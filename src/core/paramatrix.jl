@@ -82,25 +82,31 @@ The parameter derivative `∂_p A(p) = Σ_k basis_deriv(class, p)_k · coeffs_k`
 (requires the class to define [`basis_deriv`](@ref)). For a multi-parameter
 ([`ProductClass`](@ref)) object, the partial derivative along axis `dim`.
 """
-evaluate_deriv(A::ParaMatrix, p) =
+function evaluate_deriv(A::ParaMatrix, p)
     sum(w * c for (w, c) in zip(basis_deriv(A.class, p), A.coeffs))
-evaluate_deriv(A::ParaMatrix, ps, dim::Integer) =
+end
+function evaluate_deriv(A::ParaMatrix, ps, dim::Integer)
     sum(w * c for (w, c) in zip(basis_deriv(A.class, ps, dim), A.coeffs))
+end
 
 # ---- class-agnostic ring + structural operations --------------------------
 
-_sameclass(A, B) =
-    A.class == B.class || error("class mismatch: $(A.class) vs $(B.class)")
+_sameclass(A, B) = A.class == B.class || error("class mismatch: $(A.class) vs $(B.class)")
 
-Base.:+(A::ParaMatrix, B::ParaMatrix) = (_sameclass(A, B); ParaMatrix(A.coeffs .+ B.coeffs, A.class))
-Base.:-(A::ParaMatrix, B::ParaMatrix) = (_sameclass(A, B); ParaMatrix(A.coeffs .- B.coeffs, A.class))
+function Base.:+(A::ParaMatrix, B::ParaMatrix)
+    (_sameclass(A, B); ParaMatrix(A.coeffs .+ B.coeffs, A.class))
+end
+function Base.:-(A::ParaMatrix, B::ParaMatrix)
+    (_sameclass(A, B); ParaMatrix(A.coeffs .- B.coeffs, A.class))
+end
 Base.:-(A::ParaMatrix) = ParaMatrix([-c for c in A.coeffs], A.class)
 Base.:*(α::Number, A::ParaMatrix) = ParaMatrix([α * c for c in A.coeffs], A.class)
 Base.:*(A::ParaMatrix, α::Number) = α * A
 
 Base.:(==)(A::ParaMatrix, B::ParaMatrix) = A.class == B.class && A.coeffs == B.coeffs
-Base.isapprox(A::ParaMatrix, B::ParaMatrix; kw...) =
+function Base.isapprox(A::ParaMatrix, B::ParaMatrix; kw...)
     A.class == B.class && all(isapprox(a, b; kw...) for (a, b) in zip(A.coeffs, B.coeffs))
+end
 Base.zero(A::ParaMatrix) = ParaMatrix([zero(c) for c in A.coeffs], A.class)
 Base.copy(A::ParaMatrix) = ParaMatrix([copy(c) for c in A.coeffs], A.class)
 Base.transpose(A::ParaMatrix) = ParaMatrix([copy(transpose(c)) for c in A.coeffs], A.class)
@@ -122,10 +128,12 @@ end
 # gets a clear ErrorException instead of a cryptic MethodError inside `_convolve`.
 # A single method + runtime guard avoids the dispatch ambiguity a `<:RingClass`
 # overload would create against the unconstrained signature.
-_notring(A) = error(
-    "ring operation needs a RingClass (Laurent/Polynomial/ProductClass); got " *
-    "$(typeof(function_class(A))) — an ansatz class. Evaluate first (`A(p)`) and use LinearAlgebra.",
-)
+function _notring(A)
+    error(
+        "ring operation needs a RingClass (Laurent/Polynomial/ProductClass); got " *
+        "$(typeof(function_class(A))) — an ansatz class. Evaluate first (`A(p)`) and use LinearAlgebra.",
+    )
+end
 _assert_ring(A) = function_class(A) isa RingClass || _notring(A)
 
 function Base.:*(A::ParaMatrix, B::ParaMatrix)
@@ -171,10 +179,12 @@ function Base.one(A::ParaMatrix)
 end
 
 # indexing: entry → 1×1 ParaMatrix ; block → sub ParaMatrix (same class)
-Base.getindex(A::ParaMatrix, i::Int, j::Int) =
+function Base.getindex(A::ParaMatrix, i::Int, j::Int)
     ParaMatrix([fill(c[i, j], 1, 1) for c in A.coeffs], A.class)
-Base.getindex(A::ParaMatrix, I::AbstractVector, J::AbstractVector) =
+end
+function Base.getindex(A::ParaMatrix, I::AbstractVector, J::AbstractVector)
     ParaMatrix([c[I, J] for c in A.coeffs], A.class)
+end
 
 function Base.hcat(As::ParaMatrix...)
     cls = As[1].class

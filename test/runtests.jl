@@ -6,10 +6,12 @@ using StaticArrays
 using Test, Aqua
 
 # ---- helpers --------------------------------------------------------------
-randpm(d::Int, cls; T=ComplexF64, seed=0) =
+function randpm(d::Int, cls; T=ComplexF64, seed=0)
     ParaMatrix([randn(MersenneTwister(seed + 137i), T, d, d) for i in 1:nbasis(cls)], cls)
-randpm(m::Int, n::Int, cls; T=ComplexF64, seed=0) =
+end
+function randpm(m::Int, n::Int, cls; T=ComplexF64, seed=0)
     ParaMatrix([randn(MersenneTwister(seed + 137i), T, m, n) for i in 1:nbasis(cls)], cls)
+end
 
 _sortc(v) = sort(v; by=z -> (real(z), imag(z)))
 _circle_pts(n) = collect(range(0, 1; length=n + 1))[1:n]   # matches the package's internal grid
@@ -41,7 +43,8 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
         # basis_deriv vs central finite differences over many points/classes
         h = 1e-6
         for c in (Fourier(4), Laurent(-3, 3), Polynomial(5)), p in RNG_PTS
-            @test basis_deriv(c, p) ≈ (basis(c, p + h) .- basis(c, p - h)) ./ (2h) atol = 1e-4
+            @test basis_deriv(c, p) ≈ (basis(c, p + h) .- basis(c, p - h)) ./ (2h) atol =
+                1e-4
         end
         # precision: |e^{iωθ}| = 1 to BigFloat ulp (cispi, not 2π·θ)
         @test abs(basis(Laurent(0, 1), big"0.3")[2]) ≈ 1 atol = big"1e-60"
@@ -72,7 +75,9 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
             @test norm(A, 2) ≈ quad rtol = 3e-3
         end
         @test_throws Exception ParaMatrix([randn(2, 2)], Laurent(-1, 1))          # wrong count
-        @test_throws Exception ParaMatrix([randn(2, 2), randn(3, 3), randn(2, 2)], Laurent(-1, 1))  # mismatched block sizes
+        @test_throws Exception ParaMatrix(
+            [randn(2, 2), randn(3, 3), randn(2, 2)], Laurent(-1, 1)
+        )  # mismatched block sizes
     end
 
     # ====================================================================
@@ -149,9 +154,9 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
     @testset "Factorizations: reconstruction + canonical gauge" begin
         for d in (1, 2, 3, 4), seed in (2, 17)
             A = randpm(d, Laurent(-1, 1); seed=seed)
-            Fq, Fl, Fs, Fu, Fp =
-                qr(A; nsample=8), lq(A; nsample=8), svd(A; nsample=8),
-                lu(A; nsample=8), polar(A; nsample=8)
+            Fq, Fl, Fs, Fu, Fp = qr(A; nsample=8),
+            lq(A; nsample=8), svd(A; nsample=8), lu(A; nsample=8),
+            polar(A; nsample=8)
             for (i, t) in enumerate(Fq.ts)
                 At = Matrix(A(t))
                 @test Fq.Q[i] * Fq.R[i] ≈ At atol = 1e-10
@@ -188,21 +193,25 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
         wrap = norm(Fq(1.0).Q - Fq.Q[1])                 # Q(1) vs Q(0): gauge monodromy
         if maximum(jumps) > 20 * meanjump + 1e-8
             @warn "Gauge-fixed QR Q(θ) is discontinuous around the circle — parameterized QR " *
-                  "continuity is NOT guaranteed (eigenvalue/rank crossing or gauge jump)." maxjump =
-                maximum(jumps) meanjump = meanjump
+                "continuity is NOT guaranteed (eigenvalue/rank crossing or gauge jump)." maxjump = maximum(
+                jumps
+            ) meanjump = meanjump
         end
         if wrap > 1e-6
             @warn "QR factor has nonzero monodromy around the loop (Q(1) ≠ Q(0)) — a genuine " *
-                  "parameterized-matrix winding, expected for some A, not a bug." wrap = wrap
+                "parameterized-matrix winding, expected for some A, not a bug." wrap = wrap
         end
         @test isfinite(maximum(jumps))                   # substance is the @warn above
 
         # eigenvalue near-crossing ⇒ eigenvectors ill-conditioned: warn if detected
         _, Λ = on_circle(eigvals, A; nsample=64)
-        mingap = minimum(minimum(abs(λ[i] - λ[j]) for i in 1:length(λ) for j in (i + 1):length(λ)) for λ in Λ)
+        mingap = minimum(
+            minimum(abs(λ[i] - λ[j]) for i in 1:length(λ) for j in (i + 1):length(λ)) for
+            λ in Λ
+        )
         if mingap < 1e-3
             @warn "Eigenvalue near-crossing detected (min gap < 1e-3): eigenvectors are " *
-                  "ill-conditioned there; treat para-eigen vectors with care." mingap = mingap
+                "ill-conditioned there; treat para-eigen vectors with care." mingap = mingap
         end
         @test mingap ≥ 0
     end
@@ -246,7 +255,10 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
         end
         @test svd(As; nsample=6).S[1] ≈ svdvals(Matrix(As(0.0)))
 
-        ct = [SMatrix{2,2,ComplexF64}(randn(MersenneTwister(i), ComplexF64, 2, 2)) for i in 1:3]
+        ct = [
+            SMatrix{2,2,ComplexF64}(randn(MersenneTwister(i), ComplexF64, 2, 2)) for
+            i in 1:3
+        ]
         At = ParaMatrix(ct, Laurent(-1, 1))
         Atd = ParaMatrix(Matrix.(ct), Laurent(-1, 1))
         @test At(0.3) isa SMatrix
@@ -255,7 +267,10 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
             @test Matrix((At * At)(θ)) ≈ Atd(θ) * Atd(θ)
         end
 
-        Ab = ParaMatrix([randn(MersenneTwister(i), Complex{BigFloat}, 2, 2) for i in 1:3], Laurent(-1, 1))
+        Ab = ParaMatrix(
+            [randn(MersenneTwister(i), Complex{BigFloat}, 2, 2) for i in 1:3],
+            Laurent(-1, 1),
+        )
         θb = big"0.1234567890123456789"
         @test maximum(abs, para(Ab)(θb) - Ab(θb)') < big"1e-50"     # exact to BigFloat ulp
         @test eltype(Ab(θb)) == Complex{BigFloat}
@@ -291,7 +306,9 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
         @test cocycle_exponent(E, 3, 5) ≈ log(0.5) atol = 1e-12  # constant ⇒ log of it
 
         x0 = randpm(2, Laurent(-2, 2); seed=20)
-        U0 = ParaMatrix([Matrix(qr(randn(MersenneTwister(5), ComplexF64, 2, 2)).Q)], Laurent(0, 0))
+        U0 = ParaMatrix(
+            [Matrix(qr(randn(MersenneTwister(5), ComplexF64, 2, 2)).Q)], Laurent(0, 0)
+        )
         b = U0 * x0
         x, info = para_solve(U0, b; order=2)
         @test info.residual < 1e-8 && info.converged
@@ -299,7 +316,10 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
 
         Eg = randpm(3, Laurent(-1, 1); seed=13)
         _, λs, _ = leading_eigen(Eg; nsample=8)
-        @test all(abs(λs[i]) ≈ maximum(abs, eigvals(Matrix(Eg(t)))) for (i, t) in enumerate(_circle_pts(8)))
+        @test all(
+            abs(λs[i]) ≈ maximum(abs, eigvals(Matrix(Eg(t)))) for
+            (i, t) in enumerate(_circle_pts(8))
+        )
     end
 
     # ====================================================================
@@ -323,8 +343,10 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
         _, Ār, _ = pbr(2 .* yr)
         h = 1e-6
         for (k, a, b) in [(1, 1, 1), (3, 2, 1), (5, 1, 2)]
-            cp = [copy(c) for c in Ar.coeffs]; cp[k][a, b] += h
-            cm = [copy(c) for c in Ar.coeffs]; cm[k][a, b] -= h
+            cp = [copy(c) for c in Ar.coeffs];
+            cp[k][a, b] += h
+            cm = [copy(c) for c in Ar.coeffs];
+            cm[k][a, b] -= h
             @test Ār.coeffs[k][a, b] ≈ (Lc(cp) - Lc(cm)) / (2h) atol = 1e-5
         end
 
@@ -332,7 +354,9 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
         P = ParaMatrix([randn(MersenneTwister(i), 2, 2) for i in 1:3], Laurent(-1, 1))
         Q = ParaMatrix([randn(MersenneTwister(10i), 2, 2) for i in 1:3], Laurent(-1, 1))
         _, pbplus = ParaLinearAlgebra.rrule(+, P, Q)
-        Ȳp = ParaMatrix([randn(MersenneTwister(2i), ComplexF64, 2, 2) for i in 1:3], Laurent(-1, 1))
+        Ȳp = ParaMatrix(
+            [randn(MersenneTwister(2i), ComplexF64, 2, 2) for i in 1:3], Laurent(-1, 1)
+        )
         _, P̄, Q̄ = pbplus(Ȳp)
         @test all(P̄.coeffs[k] ≈ Ȳp.coeffs[k] for k in 1:3)
         @test P̄.coeffs !== Q̄.coeffs && all(P̄.coeffs[k] ≈ Q̄.coeffs[k] for k in 1:3)  # independent copies
@@ -386,8 +410,10 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
         # L² norm over the 2-torus via 2-D quadrature
         N = 64
         quad = sqrt(
-            sum(norm(A((s, t)))^2 for s in range(0, 1; length=N + 1)[1:N],
-                t in range(0, 1; length=N + 1)[1:N]) / N^2,
+            sum(
+                norm(A((s, t)))^2 for
+                s in range(0, 1; length=N + 1)[1:N], t in range(0, 1; length=N + 1)[1:N]
+            ) / N^2,
         )
         @test norm(A) ≈ quad rtol = 3e-3
     end
@@ -428,7 +454,9 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
         c0, c1, c2 = [randn(ComplexF64, 2, 2) for _ in 1:3]
         A = ParaMatrix([c0, c1, c2], Laurent(-1, 1))
         @test coeff(A, -1) === c0 && coeff(A, 0) === c1 && coeff(A, 1) === c2  # index arithmetic
-        @test nterms(A) == 3 && coefficients(A) === A.coeffs && function_class(A) === A.class
+        @test nterms(A) == 3 &&
+            coefficients(A) === A.coeffs &&
+            function_class(A) === A.class
 
         @test para_gram(A)(0.3) ≈ (para(A) * A)(0.3) atol = 1e-12
 

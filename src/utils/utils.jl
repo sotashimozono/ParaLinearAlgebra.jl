@@ -32,8 +32,9 @@ end
 Alias for [`rank`](@ref) on a `ParaMatrix` (max pointwise numerical rank over the
 circle) — the bond-dimension diagnostic of a transfer/cocycle ParaMatrix.
 """
-numerical_rank(A::ParaMatrix; nsample::Int=128, tol::Real=1e-9) =
+function numerical_rank(A::ParaMatrix; nsample::Int=128, tol::Real=1e-9)
     rank(A; nsample=nsample, tol=tol)
+end
 
 """
     rank_profile(A::ParaMatrix; nsample=256, tol=1e-9) -> (minrank, maxrank, θ_of_min)

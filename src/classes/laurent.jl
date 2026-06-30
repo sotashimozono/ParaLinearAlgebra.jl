@@ -90,10 +90,12 @@ function ispositive(A::ParaMatrix{T,S,<:Laurent}; nsample=64, tol=-1e-9) where {
     )
 end
 
-LinearAlgebra.ishermitian(A::ParaMatrix{T,S,<:Laurent}; kw...) where {T,S} =
+function LinearAlgebra.ishermitian(A::ParaMatrix{T,S,<:Laurent}; kw...) where {T,S}
     isparahermitian(A; kw...)
-LinearAlgebra.isposdef(A::ParaMatrix{T,S,<:Laurent}; kw...) where {T,S} =
+end
+function LinearAlgebra.isposdef(A::ParaMatrix{T,S,<:Laurent}; kw...) where {T,S}
     ispositive(A; kw...)
+end
 
 # det(A(z)) — a scalar Laurent polynomial — via evaluate on the circle + inverse DFT
 function LinearAlgebra.det(A::ParaMatrix{T,S,<:Laurent}) where {T,S}
@@ -109,8 +111,9 @@ end
 
 # inverse — in-class only for para-unitary (Ã = A⁻¹); the general inverse is rational
 function Base.inv(A::ParaMatrix{T,S,<:Laurent}; tol=1e-9) where {T,S}
-    isparaunitary(A; tol=tol) ||
-        error("only the para-unitary inverse is in-class (= para); a general inverse is rational")
+    isparaunitary(A; tol=tol) || error(
+        "only the para-unitary inverse is in-class (= para); a general inverse is rational",
+    )
     return para(A)
 end
 

@@ -10,7 +10,9 @@ function ChainRulesCore.rrule(::typeof(evaluate), A::ParaMatrix, p)
     function evaluate_pullback(ȳ)
         Ȳ = unthunk(ȳ)
         c̄ = [conj(w[i]) * Ȳ for i in eachindex(w)]
-        return (NoTangent(), Tangent{typeof(A)}(; coeffs=c̄, class=NoTangent()), NoTangent())
+        return (
+            NoTangent(), Tangent{typeof(A)}(; coeffs=c̄, class=NoTangent()), NoTangent()
+        )
     end
     return y, evaluate_pullback
 end
@@ -21,7 +23,7 @@ function ChainRulesCore.rrule(::typeof(+), A::ParaMatrix, B::ParaMatrix)
     # give A and B INDEPENDENT cotangent buffers: a mutation-based AD backend
     # (e.g. Mooncake) accumulating in place must not alias one into the other.
     plus_back(Ȳ) = (
-        c̄ = _ctc(Ȳ);
+        c̄=_ctc(Ȳ);
         (
             NoTangent(),
             Tangent{typeof(A)}(; coeffs=c̄, class=NoTangent()),
@@ -33,7 +35,7 @@ end
 
 function ChainRulesCore.rrule(::typeof(-), A::ParaMatrix, B::ParaMatrix)
     minus_back(Ȳ) = (
-        c̄ = _ctc(Ȳ);
+        c̄=_ctc(Ȳ);
         (
             NoTangent(),
             Tangent{typeof(A)}(; coeffs=c̄, class=NoTangent()),
@@ -47,7 +49,11 @@ function ChainRulesCore.rrule(::typeof(*), α::Number, A::ParaMatrix)
     function scal_back(Ȳ)
         c̄ = _ctc(Ȳ)
         ᾱ = sum(dot(A.coeffs[i], c̄[i]) for i in eachindex(c̄))
-        return (NoTangent(), ᾱ, Tangent{typeof(A)}(; coeffs=[conj(α) * c for c in c̄], class=NoTangent()))
+        return (
+            NoTangent(),
+            ᾱ,
+            Tangent{typeof(A)}(; coeffs=[conj(α) * c for c in c̄], class=NoTangent()),
+        )
     end
     return α * A, scal_back
 end
@@ -58,8 +64,14 @@ function ChainRulesCore.rrule(::typeof(*), A::ParaMatrix, B::ParaMatrix)
     pos = Dict(pC[i] => i for i in eachindex(pC))
     function times_back(Ȳ)
         oc = _ctc(Ȳ)
-        Ā = [sum(oc[pos[pA[i] + pB[j]]] * B.coeffs[j]' for j in eachindex(pB)) for i in eachindex(pA)]
-        B̄ = [sum(A.coeffs[i]' * oc[pos[pA[i] + pB[j]]] for i in eachindex(pA)) for j in eachindex(pB)]
+        Ā = [
+            sum(oc[pos[pA[i] + pB[j]]] * B.coeffs[j]' for j in eachindex(pB)) for
+            i in eachindex(pA)
+        ]
+        B̄ = [
+            sum(A.coeffs[i]' * oc[pos[pA[i] + pB[j]]] for i in eachindex(pA)) for
+            j in eachindex(pB)
+        ]
         return (
             NoTangent(),
             Tangent{typeof(A)}(; coeffs=Ā, class=NoTangent()),
@@ -84,7 +96,7 @@ function ChainRulesCore.rrule(::typeof(kron), A::ParaMatrix, B::ParaMatrix)
             Ai = A.coeffs[i]
             Bj = B.coeffs[j]
             for a in 1:dA1, b in 1:dA2
-                blk = @view R[(a - 1) * dB1 + 1:a * dB1, (b - 1) * dB2 + 1:b * dB2]
+                blk = @view R[((a - 1) * dB1 + 1):(a * dB1), ((b - 1) * dB2 + 1):(b * dB2)]
                 Ā[i][a, b] += sum(blk .* conj(Bj))
                 @. B̄[j] += conj(Ai[a, b]) * blk
             end

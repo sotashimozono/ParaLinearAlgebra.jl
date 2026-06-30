@@ -56,8 +56,15 @@ function Base.getproperty(F::ParaEigen, s::Symbol)
     return getfield(F, s)
 end
 Base.propertynames(::ParaEigen) = (:parent, :ts, :facts, :values, :vectors)
-Base.iterate(F::ParaEigen, st::Int=1) =
-    st == 1 ? (F.values, 2) : st == 2 ? (F.vectors, 3) : nothing
+function Base.iterate(F::ParaEigen, st::Int=1)
+    if st == 1
+        (F.values, 2)
+    elseif st == 2
+        (F.vectors, 3)
+    else
+        nothing
+    end
+end
 Base.length(::ParaEigen) = 2
 
 """
@@ -97,8 +104,17 @@ function Base.getproperty(F::ParaSVD, s::Symbol)
     return getfield(F, s)
 end
 Base.propertynames(::ParaSVD) = (:parent, :ts, :facts, :U, :S, :V, :Vt)
-Base.iterate(F::ParaSVD, st::Int=1) =
-    st == 1 ? (F.U, 2) : st == 2 ? (F.S, 3) : st == 3 ? (F.V, 4) : nothing
+function Base.iterate(F::ParaSVD, st::Int=1)
+    if st == 1
+        (F.U, 2)
+    elseif st == 2
+        (F.S, 3)
+    elseif st == 3
+        (F.V, 4)
+    else
+        nothing
+    end
+end
 Base.length(::ParaSVD) = 3
 
 """
@@ -145,7 +161,13 @@ function Base.getproperty(F::ParaQR, s::Symbol)
     return getfield(F, s)
 end
 Base.propertynames(::ParaQR) = (:parent, :ts, :facts, :Q, :R)
-Base.iterate(F::ParaQR, st::Int=1) = st == 1 ? (F.Q, 2) : st == 2 ? (F.R, 3) : nothing
+Base.iterate(F::ParaQR, st::Int=1) = if st == 1
+    (F.Q, 2)
+elseif st == 2
+    (F.R, 3)
+else
+    nothing
+end
 Base.length(::ParaQR) = 2
 
 function _lq_gauged(M::AbstractMatrix)
@@ -184,7 +206,13 @@ function Base.getproperty(F::ParaLQ, s::Symbol)
     return getfield(F, s)
 end
 Base.propertynames(::ParaLQ) = (:parent, :ts, :facts, :L, :Q)
-Base.iterate(F::ParaLQ, st::Int=1) = st == 1 ? (F.L, 2) : st == 2 ? (F.Q, 3) : nothing
+Base.iterate(F::ParaLQ, st::Int=1) = if st == 1
+    (F.L, 2)
+elseif st == 2
+    (F.Q, 3)
+else
+    nothing
+end
 Base.length(::ParaLQ) = 2
 
 # ---------- lu -------------------------------------------------------------
@@ -212,8 +240,17 @@ function Base.getproperty(F::ParaLU, s::Symbol)
     return getfield(F, s)
 end
 Base.propertynames(::ParaLU) = (:parent, :ts, :facts, :L, :U, :p)
-Base.iterate(F::ParaLU, st::Int=1) =
-    st == 1 ? (F.L, 2) : st == 2 ? (F.U, 3) : st == 3 ? (F.p, 4) : nothing
+function Base.iterate(F::ParaLU, st::Int=1)
+    if st == 1
+        (F.L, 2)
+    elseif st == 2
+        (F.U, 3)
+    elseif st == 3
+        (F.p, 4)
+    else
+        nothing
+    end
+end
 Base.length(::ParaLU) = 3
 
 # ---------- polar (no stdlib verb; new export) -----------------------------
@@ -225,7 +262,7 @@ end
 
 function _polar(M::AbstractMatrix)
     F = svd(M)
-    return (; U=F.U * F.Vt, P=F.V * Diagonal(F.S) * F.Vt)
+    return (; U=(F.U * F.Vt), P=(F.V * Diagonal(F.S) * F.Vt))
 end
 
 """
@@ -246,7 +283,13 @@ function Base.getproperty(F::ParaPolar, s::Symbol)
     return getfield(F, s)
 end
 Base.propertynames(::ParaPolar) = (:parent, :ts, :facts, :U, :P)
-Base.iterate(F::ParaPolar, st::Int=1) = st == 1 ? (F.U, 2) : st == 2 ? (F.P, 3) : nothing
+Base.iterate(F::ParaPolar, st::Int=1) = if st == 1
+    (F.U, 2)
+elseif st == 2
+    (F.P, 3)
+else
+    nothing
+end
 Base.length(::ParaPolar) = 2
 
 # ---------- regularized pseudo-inverse (SVD divergence removal) -------------

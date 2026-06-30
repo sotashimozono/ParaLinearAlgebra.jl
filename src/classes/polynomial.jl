@@ -17,8 +17,9 @@ end
 powers(c::Polynomial) = 0:(c.N)
 
 basis(c::Polynomial, p) = [float(p)^k for k in powers(c)]
-basis_deriv(c::Polynomial, p) =
+function basis_deriv(c::Polynomial, p)
     [k == 0 ? zero(float(p)) : k * float(p)^(k - 1) for k in powers(c)]
+end
 
 # L² Gram over [0,1):  ∫ θ^k θ^l dθ = 1/(k+l+1)  (a Hilbert-type matrix)
 basis_gram(c::Polynomial) = [1.0 / (k + l + 1) for k in 0:(c.N), l in 0:(c.N)]

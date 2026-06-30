@@ -37,7 +37,9 @@ The cocycle (dynamical-shift) Lyapunov exponent: per-site log growth of the
 transfer cocycle under `θ → θ + p/q`, accumulated with rescaling for stability.
 `p/q = Fₙ/Fₙ₊₁ → 1/φ` recovers the irrational (phason) environment rate.
 """
-function cocycle_exponent(E::ParaMatrix{T,S,<:Laurent}, p::Int, q::Int; θ0::Real=0.0) where {T,S}
+function cocycle_exponent(
+    E::ParaMatrix{T,S,<:Laurent}, p::Int, q::Int; θ0::Real=0.0
+) where {T,S}
     α = p / q
     n = size(E, 1)
     M = Matrix{complex(float(T))}(I, n, n)
@@ -66,7 +68,11 @@ fit, KrylovKit-style: returns the fitted `x::ParaMatrix` and
 A large residual means `x` is genuinely rational and needs a higher `order`.
 """
 function para_solve(
-    A::ParaMatrix{T,S,<:Laurent}, b::ParaMatrix; order::Int=8, nsample::Int=0, tol::Real=1e-8
+    A::ParaMatrix{T,S,<:Laurent},
+    b::ParaMatrix;
+    order::Int=8,
+    nsample::Int=0,
+    tol::Real=1e-8,
 ) where {T,S}
     CT = complex(float(T))
     L = order
