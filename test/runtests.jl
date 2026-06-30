@@ -1,39 +1,30 @@
-ENV["GKSwstype"] = "100"
-
 using ParaLinearAlgebra
+using LinearAlgebra
+using Random
+using SparseArrays
+using StaticArrays
 using Test, Aqua
-const dirs = []
 
-const FIG_BASE = joinpath(pkgdir(ParaLinearAlgebra), "docs", "src", "assets")
-const PATHS = Dict()
-mkpath.(values(PATHS))
+include("helpers.jl")
 
-@testset "tests" begin
-    # ----- Test the module itself. -----
-    @testset "Aqua tests" begin
-        Aqua.test_all(ParaLinearAlgebra)
+# Test files mirror the src/ layout one-to-one, so it is explicit which source
+# each test exercises:  test/<dir>/test_<name>.jl  ↔  src/<dir>/<name>.jl.
+const TESTDIRS = ["core", "classes", "solver", "utils"]
+
+@testset "ParaLinearAlgebra" begin
+    @testset "Aqua" begin
+        Aqua.test_all(ParaLinearAlgebra; ambiguities=false)
     end
-    # ----- Test files in the "test" directory. -----
-    test_args = copy(ARGS)
-    println("Passed arguments ARGS = $(test_args) to tests.")
-    @time for dir in dirs
+
+    for dir in TESTDIRS
         dirpath = joinpath(@__DIR__, dir)
-        println("\nTest $(dirpath)")
         files = sort(
             filter(f -> startswith(f, "test_") && endswith(f, ".jl"), readdir(dirpath))
         )
-        if isempty(files)
-            println("  No test files found in $(dirpath).")
-            @test false
-        else
-            for f in files
-                @testset "$f" begin
-                    filepath = joinpath(dirpath, f)
-                    @time begin
-                        println("  Including $(filepath)")
-                        include(filepath)
-                    end
-                end
+        isempty(files) && @warn "no test files in test/$dir"
+        for f in files
+            @testset "$dir/$f" begin
+                include(joinpath(dirpath, f))
             end
         end
     end
