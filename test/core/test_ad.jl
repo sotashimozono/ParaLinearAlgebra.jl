@@ -1,0 +1,64 @@
+# tests src/core/chainrules.jl END-TO-END through Zygote — i.e. that the
+# ChainRulesCore rrules actually COMPOSE under a real AD backend (gradient of a
+# scalar loss vs central finite differences), not just in isolation.
+# Mooncake/Enzyme end-to-end + ChainRulesCore→ext are tracked in issue #2.
+
+using Zygote
+
+# flatten a Vector{Matrix} gradient + central-difference reference over real entries
+function _flat(g, c0)
+    return [
+        g[k][a, b] for k in eachindex(c0) for a in axes(c0[k], 1) for b in axes(c0[k], 2)
+    ]
+end
+function _fdgrad(L, c0; h=1e-6)
+    return [
+        begin
+            cp = [copy(x) for x in c0]
+            cp[k][a, b] += h
+            Lp = L(cp)
+            cp[k][a, b] -= 2h
+            Lm = L(cp)
+            (Lp - Lm) / (2h)
+        end for k in eachindex(c0) for a in axes(c0[k], 1) for b in axes(c0[k], 2)
+    ]
+end
+
+@testset "Zygote ∘ evaluate (Fourier, real)" begin
+    cls = Fourier(2)
+    for θ in (0.0, 0.3, 0.71), seed in SEEDS
+        c0 = [randn(MersenneTwister(seed + i), 2, 2) for i in 1:5]
+        L(c) = sum(abs2, evaluate(ParaMatrix(c, cls), θ))
+        @test _flat(Zygote.gradient(L, c0)[1], c0) ≈ _fdgrad(L, c0) atol = 1e-5
+    end
+end
+
+@testset "Zygote ∘ ring ops (Laurent): * , kron, para" begin
+    clL = Laurent(-1, 1)
+    for seed in SEEDS
+        B = ParaMatrix(
+            [randn(MersenneTwister(20seed + i), ComplexF64, 2, 2) for i in 1:3], clL
+        )
+        c0 = [randn(MersenneTwister(3seed + i), 2, 2) for i in 1:3]   # real coeffs ⇒ real ∂
+        Lmul(c) = sum(abs2, evaluate(ParaMatrix(c, clL) * B, 0.2))
+        Lkron(c) = sum(abs2, evaluate(ParaMatrix(c, clL) ⊗ B, 0.4))
+        Lpara(c) = sum(abs2, evaluate(para(ParaMatrix(c, clL)), 0.27))
+        @test _flat(Zygote.gradient(Lmul, c0)[1], c0) ≈ _fdgrad(Lmul, c0) atol = 1e-5
+        @test _flat(Zygote.gradient(Lkron, c0)[1], c0) ≈ _fdgrad(Lkron, c0) atol = 1e-5
+        @test _flat(Zygote.gradient(Lpara, c0)[1], c0) ≈ _fdgrad(Lpara, c0) atol = 1e-5
+    end
+end
+
+@testset "Zygote ∘ + / scalar* (sum over the orbit)" begin
+    cls = Fourier(1)
+    for seed in SEEDS
+        c0 = [randn(MersenneTwister(7seed + i), 2, 2) for i in 1:3]
+        # a loss that exercises scalar* and + (3A = 2A + A) at two points
+        function L(c)
+            A = ParaMatrix(c, cls)
+            B = 2.0 * A + A
+            return sum(abs2, evaluate(B, 0.1)) + sum(abs2, evaluate(B, 0.6))
+        end
+        @test _flat(Zygote.gradient(L, c0)[1], c0) ≈ _fdgrad(L, c0) atol = 1e-5
+    end
+end
