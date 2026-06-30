@@ -232,3 +232,89 @@ function para_svd(A::ParaMatrix{T,Sm,<:Laurent}; order::Int=12, nsample::Int=0) 
     )
     return (; U=U, S=Sd, V=V, residual=residual, winding=winding)
 end
+
+"""
+    para_eigen(H; order=12, nsample=0) -> (; U, D, residual, winding)
+
+Parameterized ("analytic") eigendecomposition (PEVD) of a **para-Hermitian**
+Laurent `ParaMatrix` `H` (`H(θ)` Hermitian ∀θ): `H(θ) ≈ U(θ)·D(θ)·U(θ)'` with `U`
+para-unitary and `D` **real** diagonal carrying the **eigenvalue functions**
+(bands), returned AS ParaMatrices. The eigen-analogue of [`para_svd`](@ref); the
+sampled counterpart is `eigen`.
+
+Same approximate nature and honest limits as `para_svd`: eigenvalues/eigenvectors
+are analytic but generally **not** finite Laurent (infinite series; branch points
+at crossings). `D` (the eigenvalue functions) is gauge-invariant and periodic ⇒
+**always recovered**; `U` is a clean Laurent factor only when the bands stay
+separated and the per-band Berry/Zak phase `winding ≈ 0`, otherwise `residual` is
+large and a `@warn` fires. Unlike `para_svd` the eigenvalues are real and may be
+negative, and the same `U` appears on both sides (so reconstruction is invariant
+to each eigenvector's phase).
+
+!!! note "Known limitations (scientific scope)"
+    Single parameter (Laurent) only; assumes `H` para-Hermitian (else the Hermitian
+    part at each θ is used, with a warning). See the `TODO`s in the source for the
+    eigenvalue-crossing / degeneracy / ordering-convention cases not yet handled.
+"""
+function para_eigen(H::ParaMatrix{T,S,<:Laurent}; order::Int=12, nsample::Int=0) where {T,S}
+    n = size(H, 1)
+    n == size(H, 2) ||
+        throw(DimensionMismatch("para_eigen needs a square H; got $(size(H))"))
+    isparahermitian(H) || @warn(
+        "para_eigen: H is not para-Hermitian (H(θ) not Hermitian on the circle); " *
+            "decomposing the Hermitian part at each θ instead.",
+        maxlog = 1,
+    )
+    N = nsample > 0 ? nsample : max(64, 16 * order)
+    CT = complex(float(T))
+    grid = range(0, 1; length=(N + 1))[1:N]
+    Us = Vector{Matrix{CT}}(undef, N)
+    Ds = Vector{Vector{Float64}}(undef, N)
+    for (i, t) in enumerate(grid)
+        F = eigen(Hermitian(Matrix(H(t))))   # real, ascending eigenvalues + orthonormal vectors
+        Us[i] = F.vectors
+        Ds[i] = F.values
+    end
+    # Branch-track the bands by eigenvector overlap, then parallel-transport each
+    # eigenvector's phase for continuity (the eigenvalue-phase cancels in U D U').
+    # TODO: at band CROSSINGS / degeneracies the eigenvectors rotate arbitrarily fast
+    #   (Wedin/Davis–Kahan: gap→0) and overlap-matching can mis-track; a proper
+    #   analytic continuation through crossings is not done. TODO: expose an
+    #   ordering convention (analytic branches vs ascending/spectrally-majorised) —
+    #   currently analytic-branch via tracking. TODO: degenerate bands leave the
+    #   eigenvector gauge ambiguous within the eigenspace (only the subspace is
+    #   defined); per-band fitting is then unreliable. TODO: multi-parameter
+    #   (ProductClass) PEVD — none here (the 1-D elementary-factor structure that
+    #   makes this work has no general multivariate analogue).
+    for i in 2:N
+        p = _svdmatch(Us[i - 1], Us[i])
+        Us[i] = Us[i][:, p]
+        Ds[i] = Ds[i][p]
+        for k in 1:n
+            ph = dot(Us[i - 1][:, k], Us[i][:, k])
+            ph = iszero(ph) ? one(CT) : ph / abs(ph)
+            @views Us[i][:, k] .*= conj(ph)
+        end
+    end
+    winding = [angle(dot(Us[N][:, k], Us[1][:, k])) for k in 1:n]   # per-band wrap holonomy (Zak)
+    fit(seq) = ParaMatrix(
+        [
+            sum(seq[j + 1] * cispi(-2 * k * (j / N)) for j in 0:(N - 1)) / N for
+            k in (-order):order
+        ],
+        Laurent(-order, order),
+    )
+    U = fit(Us)
+    D = fit([Matrix{CT}(Diagonal(Ds[i])) for i in 1:N])
+    g2 = range(0, 1; length=(2N + 1))[1:(2N)]
+    residual = maximum(
+        norm(Matrix(H(t)) - Matrix(U(t)) * Matrix(D(t)) * Matrix(U(t))') for t in g2
+    )
+    residual > 1e-6 && @warn(
+        "para_eigen: residual $(residual) — eigenvectors may not be band-limited Laurent " *
+            "(band crossing or nonzero per-band Berry phase $(round.(winding; digits=3))); " *
+            "raise `order`/`nsample`, or expect only the eigenvalue functions `D` to be accurate.",
+        maxlog = 3,
+    )
+    return (; U=U, D=D, residual=residual, winding=winding)
+end
