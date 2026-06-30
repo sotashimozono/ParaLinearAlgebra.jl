@@ -61,7 +61,7 @@ export FunctionClass,
     RingClass, basis, basis_deriv, basis_gram, basis_integral, nbasis, powers
 export ParaMatrix, evaluate, evaluate_deriv, coefficients, function_class, coeff, nterms
 export integral
-export paraeye, ⊗
+export paraeye, ⊗, ⊕, directsum
 # classes
 export Fourier, Laurent, Analytic, Polynomial, ProductClass
 # para-structure
