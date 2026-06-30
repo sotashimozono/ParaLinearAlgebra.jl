@@ -63,3 +63,40 @@ end
         @test specmatch(eigvals(Matrix(D(θ))), [cispi(2 * k * θ) for k in ks])
     end
 end
+
+# The Laurent families above all live in one ring class; the POLYNOMIAL ring class
+# gets its own closed-form oracle from the Chebyshev product-to-sum identity
+#     Tₘ(x)·Tₙ(x) = ½( T_{m+n}(x) + T_{|m−n|}(x) ),
+# with the independent defining property Tₙ(cos φ) = cos(n φ). This pins down the
+# Polynomial-ring product `*` (_convolve) against pure trigonometry.
+@testset "Chebyshev product-to-sum (Polynomial ring): Tₘ·Tₙ = ½(T_{m+n}+T_{|m−n|})" begin
+    # monomial coefficients of Tₙ via the recurrence T_{k+1} = 2x·T_k − T_{k−1}
+    function chebcoeffs(n)
+        n == 0 && return [1.0]
+        n == 1 && return [0.0, 1.0]
+        tkm1, tk = [1.0], [0.0, 1.0]
+        for _ in 2:n
+            t = vcat(0.0, 2 .* tk)              # 2x · T_k
+            for i in eachindex(tkm1)
+                t[i] -= tkm1[i]                 # − T_{k−1}
+            end
+            tkm1, tk = tk, t
+        end
+        return tk
+    end
+    chebpoly(n) = ParaMatrix([fill(c, 1, 1) for c in chebcoeffs(n)], Polynomial(n))
+    Tval(n, t) = cospi(n * t)                   # Tₙ(cos πt) = cos(nπt) — definition, not construction
+
+    for n in 0:4, t in RNG_PTS
+        @test chebpoly(n)(cospi(t))[1, 1] ≈ Tval(n, t) atol = 1e-10   # construction matches definition
+    end
+    for (m, n) in ((1, 4), (2, 3), (2, 2), (3, 4), (0, 3))
+        P = chebpoly(m) * chebpoly(n)           # the Polynomial-ring product under test
+        @test P.class == Polynomial(m + n)      # degrees add
+        for t in RNG_PTS
+            x = cospi(t)
+            @test P(x)[1, 1] ≈ 0.5 * (Tval(m + n, t) + Tval(abs(m - n), t)) atol = 1e-10  # product-to-sum
+            @test P(x)[1, 1] ≈ chebpoly(m)(x)[1, 1] * chebpoly(n)(x)[1, 1] atol = 1e-10   # vs pointwise
+        end
+    end
+end
