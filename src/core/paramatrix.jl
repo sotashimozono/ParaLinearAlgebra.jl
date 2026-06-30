@@ -149,12 +149,12 @@ function Base.kron(A::ParaMatrix, B::ParaMatrix)
     return _convolve(kron, A, B)
 end
 """
-    ⊗(A, B)
+    ⊗(A, B, Cs...)
 
 Infix Kronecker product `A ⊗ B = kron(A, B)` (coefficient-convolution kron of two
-ParaMatrices).
+ParaMatrices). Variadic: `A ⊗ B ⊗ C` folds left.
 """
-⊗(A, B) = kron(A, B)
+⊗(A, B, Cs...) = foldl(kron, (A, B, Cs...))
 
 """
     directsum(A, B) -> ParaMatrix
@@ -173,11 +173,12 @@ function directsum(A::ParaMatrix, B::ParaMatrix)
 end
 
 """
-    ⊕(A, B)
+    ⊕(A, B, Cs...)
 
-Infix direct sum `A ⊕ B = directsum(A, B)` (block-diagonal stack).
+Infix direct sum `A ⊕ B = directsum(A, B)` (block-diagonal stack). Variadic:
+`A ⊕ B ⊕ C` folds left.
 """
-⊕(A, B) = directsum(A, B)
+⊕(A, B, Cs...) = foldl(directsum, (A, B, Cs...))
 
 function Base.:^(A::ParaMatrix, n::Integer)
     _assert_ring(A)
@@ -250,6 +251,14 @@ function Base.vcat(As::ParaMatrix...)
     cls = As[1].class
     all(A.class == cls for A in As) || error("vcat needs a common class")
     return ParaMatrix([reduce(vcat, (A.coeffs[k] for A in As)) for k in 1:nbasis(cls)], cls)
+end
+# block-matrix literal `[A B; C D]` — per-coefficient hvcat with the same row spec
+function Base.hvcat(rows::Tuple{Vararg{Int}}, As::ParaMatrix...)
+    cls = As[1].class
+    all(A.class == cls for A in As) || error("hvcat needs a common class")
+    return ParaMatrix(
+        [hvcat(rows, (A.coeffs[k] for A in As)...) for k in 1:nbasis(cls)], cls
+    )
 end
 
 # class-agnostic reductions
