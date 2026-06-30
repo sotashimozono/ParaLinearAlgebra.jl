@@ -72,3 +72,30 @@ end
     @test !isparahermitian(A)
     @test_logs (:warn,) match_mode = :any para_eigen(A; order=6)
 end
+
+# order-2 real separated diagonal: dᵢ(θ) = cᵢ + 0.2cos2πθ + 0.15cos4πθ
+function _realdiag2(cs)
+    d = length(cs)
+    z0 = Matrix{ComplexF64}(Diagonal(ComplexF64.(cs)))
+    z1 = Matrix{ComplexF64}(Diagonal(fill(ComplexF64(0.1), d)))
+    z2 = Matrix{ComplexF64}(Diagonal(fill(ComplexF64(0.075), d)))
+    return ParaMatrix([z2, z1, z0, z1, z2], Laurent(-2, 2))
+end
+
+@testset "para_eigen refinements: mingap diagnostic + adaptive order" begin
+    U0 = _constunitary(3, 5)
+    H = U0 * _realdiag([2.0, 0.5, -1.5], [0.2, 0.2, 0.2]) * para(U0)
+    F = para_eigen(H; order=8)
+    @test F.mingap > 0.5                                  # well-separated bands
+    @test F.order == 8                                    # fixed order when tol=0
+
+    Hhi = U0 * _realdiag2([2.0, 0.0, -2.0]) * para(U0)    # bands need order ≥ 2
+    @test para_eigen(Hhi; order=1).residual > 1e-6
+    F2 = para_eigen(Hhi; order=1, tol=1e-9, maxorder=20)
+    @test F2.residual ≤ 1e-9
+    @test F2.order > 1
+
+    Hx = U0 * _realdiag([1.0, 1.0001, 5.0], [0.0, 0.0, 0.0]) * para(U0)
+    Fx = @test_logs (:warn,) match_mode = :any para_eigen(Hx; order=8, gaptol=1e-2)
+    @test Fx.mingap < 1e-2
+end
