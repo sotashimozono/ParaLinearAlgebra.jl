@@ -73,3 +73,33 @@ end
         @test sort(real(diag(F.S(θ))); rev=true) ≈ ones(2) atol = 1e-6  # σ ≡ 1 still recovered
     end
 end
+
+# order-2 separated positive diagonal: dᵢ(θ) = cᵢ + 0.2cos2πθ + 0.15cos4πθ
+function _posdiag2(cs)
+    d = length(cs)
+    z0 = Matrix{ComplexF64}(Diagonal(ComplexF64.(cs)))
+    z1 = Matrix{ComplexF64}(Diagonal(fill(ComplexF64(0.1), d)))
+    z2 = Matrix{ComplexF64}(Diagonal(fill(ComplexF64(0.075), d)))
+    return ParaMatrix([z2, z1, z0, z1, z2], Laurent(-2, 2))
+end
+
+@testset "para_svd refinements: mingap diagnostic + adaptive order" begin
+    U0 = _constunitary(3, 5)
+    V0 = _constunitary(3, 6)
+    A = U0 * _posdiag([3.0, 2.0, 1.0], [0.2, 0.2, 0.2]) * para(V0)
+    F = para_svd(A; order=8)
+    @test F.mingap > 0.5                                  # well-separated bands
+    @test F.order == 8                                    # fixed order when tol=0
+
+    # adaptive order: a fixed low order is poor; with tol it grows to meet it
+    Ahi = U0 * _posdiag2([3.0, 2.0, 1.0]) * para(V0)      # needs order ≥ 2
+    @test para_svd(Ahi; order=1).residual > 1e-6
+    F2 = para_svd(Ahi; order=1, tol=1e-9, maxorder=20)
+    @test F2.residual ≤ 1e-9
+    @test F2.order > 1
+
+    # near-degeneracy ⇒ small mingap + @warn
+    Ax = U0 * _posdiag([1.0, 1.0001, 5.0], [0.0, 0.0, 0.0]) * para(V0)
+    Fx = @test_logs (:warn,) match_mode = :any para_svd(Ax; order=8, gaptol=1e-2)
+    @test Fx.mingap < 1e-2
+end

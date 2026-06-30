@@ -140,6 +140,19 @@ function para_lq(
     return (; L=L, Q=Q, residual=residual, isometry=isometry)
 end
 
+# smallest gap between adjacent (sorted) band values over the whole grid — a
+# crossing/near-degeneracy diagnostic for the analytic factorizations
+function _mingap(vals::AbstractVector)
+    g = Inf
+    for v in vals
+        s = sort(real.(v))
+        for k in 1:(length(s) - 1)
+            g = min(g, s[k + 1] - s[k])
+        end
+    end
+    return g
+end
+
 # greedy column matching: permutation aligning the columns of `cur` with `prev`
 # by largest singular-vector overlap (branch tracking through near-degeneracies)
 function _svdmatch(prev::AbstractMatrix, cur::AbstractMatrix)
@@ -161,7 +174,8 @@ function _svdmatch(prev::AbstractMatrix, cur::AbstractMatrix)
 end
 
 """
-    para_svd(A; order=12, nsample=0) -> (; U, S, V, residual, winding)
+    para_svd(A; order=12, nsample=0, tol=0, maxorder=64, gaptol=1e-4)
+        -> (; U, S, V, residual, winding, mingap, order)
 
 Parameterized ("analytic") SVD of a Laurent `ParaMatrix` `A`: factors returned **as
 ParaMatrices**, `A(θ) ≈ U(θ)·S(θ)·V(θ)'`, with `U`/`V` column-orthonormal at each
@@ -178,10 +192,23 @@ product is invariant), then **DFT-fits** each factor to `Laurent(order)`.
 `S` is robust — the singular-value functions are gauge-invariant and periodic, so
 they fit cleanly. `U,V` are good **iff** the singular values stay separated and the
 per-band Berry phase `winding` vanishes; otherwise the factor is not a band-limited
-Laurent and `residual = max_θ‖A − U S V'‖` is large (a `@warn` fires). Raise
-`order`/`nsample` for wigglier factors. `nsample` defaults to `max(64, 16·order)`.
+Laurent and `residual = max_θ‖A − U S V'‖` is large (a `@warn` fires).
+
+Refinement knobs/diagnostics: with `tol > 0` the `order` is grown (re-fitting the
+gauge-fixed samples) until `residual ≤ tol` or `order = maxorder`, and the order
+actually used is returned. `mingap` is the smallest gap between adjacent singular
+values over the grid; if `mingap < gaptol` a crossing/near-degeneracy is reported
+(`@warn`) — there the branch tracking and the analytic factor are unreliable.
+`nsample` defaults to `max(64, 16·order)`.
 """
-function para_svd(A::ParaMatrix{T,Sm,<:Laurent}; order::Int=12, nsample::Int=0) where {T,Sm}
+function para_svd(
+    A::ParaMatrix{T,Sm,<:Laurent};
+    order::Int=12,
+    nsample::Int=0,
+    tol::Real=0,
+    maxorder::Int=64,
+    gaptol::Real=1e-4,
+) where {T,Sm}
     m, n = size(A)
     r = min(m, n)
     N = nsample > 0 ? nsample : max(64, 16 * order)
@@ -210,31 +237,44 @@ function para_svd(A::ParaMatrix{T,Sm,<:Laurent}; order::Int=12, nsample::Int=0) 
         end
     end
     winding = [angle(dot(Us[N][:, k], Us[1][:, k])) for k in 1:r]   # per-band wrap holonomy
-    fit(seq) = ParaMatrix(
+    mingap = _mingap(Ss)
+    mingap < gaptol && @warn(
+        "para_svd: singular values approach within mingap=$(mingap) < gaptol — a " *
+            "crossing/near-degeneracy; branch tracking and the analytic U,V are unreliable there.",
+        maxlog = 2,
+    )
+    Sseq = [Matrix{CT}(Diagonal(Ss[i])) for i in 1:N]
+    fit(seq, ord) = ParaMatrix(
         [
             sum(seq[j + 1] * cispi(-2 * k * (j / N)) for j in 0:(N - 1)) / N for
-            k in (-order):order
+            k in (-ord):ord
         ],
-        Laurent(-order, order),
+        Laurent(-ord, ord),
     )
-    U = fit(Us)
-    V = fit(Vs)
-    Sd = fit([Matrix{CT}(Diagonal(Ss[i])) for i in 1:N])
     g2 = range(0, 1; length=(2N + 1))[1:(2N)]
-    residual = maximum(
-        norm(Matrix(A(t)) - Matrix(U(t)) * Matrix(Sd(t)) * Matrix(V(t))') for t in g2
-    )
+    # adaptive order: grow until the reconstruction residual meets `tol` (tol≤0 ⇒ fixed `order`)
+    ord = min(order, maxorder)
+    local U, V, Sd, residual
+    while true
+        U, V, Sd = fit(Us, ord), fit(Vs, ord), fit(Sseq, ord)
+        residual = maximum(
+            norm(Matrix(A(t)) - Matrix(U(t)) * Matrix(Sd(t)) * Matrix(V(t))') for t in g2
+        )
+        (tol ≤ 0 || residual ≤ tol || ord ≥ maxorder || 2 * (ord + 4) ≥ N) && break
+        ord += 4
+    end
     residual > 1e-6 && @warn(
         "para_svd: residual $(residual) — factors may not be band-limited Laurent " *
             "(singular-value crossing or nonzero per-band Berry phase $(round.(winding; digits=3))); " *
-            "raise `order`/`nsample`, or expect only the singular values to be accurate.",
+            "raise `order`/`nsample`/`tol`, or expect only the singular values to be accurate.",
         maxlog = 3,
     )
-    return (; U=U, S=Sd, V=V, residual=residual, winding=winding)
+    return (; U=U, S=Sd, V=V, residual=residual, winding=winding, mingap=mingap, order=ord)
 end
 
 """
-    para_eigen(H; order=12, nsample=0) -> (; U, D, residual, winding)
+    para_eigen(H; order=12, nsample=0, tol=0, maxorder=64, gaptol=1e-4)
+        -> (; U, D, residual, winding, mingap, order)
 
 Parameterized ("analytic") eigendecomposition (PEVD) of a **para-Hermitian**
 Laurent `ParaMatrix` `H` (`H(θ)` Hermitian ∀θ): `H(θ) ≈ U(θ)·D(θ)·U(θ)'` with `U`
@@ -256,7 +296,14 @@ to each eigenvector's phase).
     part at each θ is used, with a warning). See the `TODO`s in the source for the
     eigenvalue-crossing / degeneracy / ordering-convention cases not yet handled.
 """
-function para_eigen(H::ParaMatrix{T,S,<:Laurent}; order::Int=12, nsample::Int=0) where {T,S}
+function para_eigen(
+    H::ParaMatrix{T,S,<:Laurent};
+    order::Int=12,
+    nsample::Int=0,
+    tol::Real=0,
+    maxorder::Int=64,
+    gaptol::Real=1e-4,
+) where {T,S}
     n = size(H, 1)
     n == size(H, 2) ||
         throw(DimensionMismatch("para_eigen needs a square H; got $(size(H))"))
@@ -297,24 +344,36 @@ function para_eigen(H::ParaMatrix{T,S,<:Laurent}; order::Int=12, nsample::Int=0)
         end
     end
     winding = [angle(dot(Us[N][:, k], Us[1][:, k])) for k in 1:n]   # per-band wrap holonomy (Zak)
-    fit(seq) = ParaMatrix(
+    mingap = _mingap(Ds)
+    mingap < gaptol && @warn(
+        "para_eigen: bands approach within mingap=$(mingap) < gaptol — a crossing/" *
+            "near-degeneracy; branch tracking and the analytic U are unreliable there.",
+        maxlog = 2,
+    )
+    Dseq = [Matrix{CT}(Diagonal(Ds[i])) for i in 1:N]
+    fit(seq, ord) = ParaMatrix(
         [
             sum(seq[j + 1] * cispi(-2 * k * (j / N)) for j in 0:(N - 1)) / N for
-            k in (-order):order
+            k in (-ord):ord
         ],
-        Laurent(-order, order),
+        Laurent(-ord, ord),
     )
-    U = fit(Us)
-    D = fit([Matrix{CT}(Diagonal(Ds[i])) for i in 1:N])
     g2 = range(0, 1; length=(2N + 1))[1:(2N)]
-    residual = maximum(
-        norm(Matrix(H(t)) - Matrix(U(t)) * Matrix(D(t)) * Matrix(U(t))') for t in g2
-    )
+    ord = min(order, maxorder)
+    local U, D, residual
+    while true
+        U, D = fit(Us, ord), fit(Dseq, ord)
+        residual = maximum(
+            norm(Matrix(H(t)) - Matrix(U(t)) * Matrix(D(t)) * Matrix(U(t))') for t in g2
+        )
+        (tol ≤ 0 || residual ≤ tol || ord ≥ maxorder || 2 * (ord + 4) ≥ N) && break
+        ord += 4
+    end
     residual > 1e-6 && @warn(
         "para_eigen: residual $(residual) — eigenvectors may not be band-limited Laurent " *
             "(band crossing or nonzero per-band Berry phase $(round.(winding; digits=3))); " *
-            "raise `order`/`nsample`, or expect only the eigenvalue functions `D` to be accurate.",
+            "raise `order`/`nsample`/`tol`, or expect only the eigenvalue functions `D` to be accurate.",
         maxlog = 3,
     )
-    return (; U=U, D=D, residual=residual, winding=winding)
+    return (; U=U, D=D, residual=residual, winding=winding, mingap=mingap, order=ord)
 end
