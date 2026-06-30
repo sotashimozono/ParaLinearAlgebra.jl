@@ -137,12 +137,20 @@ function LinearAlgebra.det(A::ParaMatrix{T,S,<:Laurent}) where {T,S}
     return ParaMatrix([fill(dk[m + 1], 1, 1) for m in 0:(M - 1)], Laurent(lo, hi))
 end
 
-# inverse — in-class only for para-unitary (Ã = A⁻¹); the general inverse is rational
-function Base.inv(A::ParaMatrix{T,S,<:Laurent}; tol=1e-9) where {T,S}
-    isparaunitary(A; tol=tol) || error(
-        "only the para-unitary inverse is in-class (= para); a general inverse is rational",
+# inverse: EXACT and in-class for para-unitary (A⁻¹ = para(A)); otherwise the
+# inverse is rational (adj(A)/det(A)) — return its best `Laurent(order)` fit
+# (convergent when A⁻¹ is analytic on the circle, i.e. det A(θ) ≠ 0 there) and
+# WARN if the fit does not converge. Use `pinv` for the sampled (pointwise) form.
+function Base.inv(A::ParaMatrix{T,S,<:Laurent}; order::Int=8, tol=1e-9) where {T,S}
+    size(A, 1) == size(A, 2) || throw(DimensionMismatch("inv needs a square ParaMatrix"))
+    isparaunitary(A; tol=tol) && return para(A)
+    x, info = para_solve(A, paraeye(size(A, 1), T, A.class); order=order)
+    info.converged || @warn(
+        "inv: A⁻¹ is rational (A is not para-unitary); the Laurent(order=$order) fit " *
+            "has residual $(info.residual). Raise `order`, or use `pinv` for the sampled inverse.",
+        maxlog = 3,
     )
-    return para(A)
+    return x
 end
 
 # para-adjoint pullback (adjoint+mirror = para itself); kept with its primal
