@@ -46,6 +46,7 @@ include("classes/fourier.jl")
 include("classes/laurent.jl")
 include("classes/polynomial.jl")
 include("classes/product.jl")
+include("core/blockparamatrix.jl")
 
 # solver: algorithms on a ParaMatrix
 include("solver/spectral.jl")
@@ -60,6 +61,7 @@ include("utils/utils.jl")
 export FunctionClass,
     RingClass, basis, basis_deriv, basis_gram, basis_integral, nbasis, powers
 export ParaMatrix, evaluate, evaluate_deriv, coefficients, function_class, coeff, nterms
+export BlockParaMatrix, nparams
 export integral
 export paraeye, ⊗, ⊕, directsum
 # classes

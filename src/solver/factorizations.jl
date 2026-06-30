@@ -50,7 +50,7 @@ end
 Sampled eigendecomposition of a `ParaMatrix` returned by `eigen`; callable
 (`F(θ)`) and exposing `F.values`, `F.vectors`, `F.ts`.
 """
-struct ParaEigen{PM<:ParaMatrix,F}
+struct ParaEigen{PM,F}
     parent::PM
     ts::Vector
     facts::Vector{F}
@@ -118,7 +118,7 @@ end
 Sampled SVD of a `ParaMatrix` returned by `svd`; callable (`F(θ)`) and
 exposing `F.U`, `F.S`, `F.V`, `F.ts`.
 """
-struct ParaSVD{PM<:ParaMatrix,F}
+struct ParaSVD{PM,F}
     parent::PM
     ts::Vector
     facts::Vector{F}
@@ -374,4 +374,43 @@ function LinearAlgebra.pinv(
     rt = rtol > 0 ? rtol : (atol > 0 ? 0.0 : eps(real(float(one(T)))) * minimum(size(A)))
     ts = _paramgrid(A.class, nsample)
     return ts, [pinv(Matrix(A(t)); atol=atol, rtol=rt) for t in ts]
+end
+
+# ---------- BlockParaMatrix (independently-parameterized blocks) ------------
+# Sampled pointwise over the n-D grid of the block's INDEPENDENT parameters; the
+# same per-point-only guarantee applies (no global gauge over ≥2 parameters).
+function _paramgrid_n(n::Int, nsample::Int)
+    n == 1 && return collect(_circle(nsample))
+    g = _circle(nsample)
+    return vec([t for t in Iterators.product(ntuple(_ -> g, n)...)])
+end
+
+"""
+    eigen(M::BlockParaMatrix; nsample=24, ishermitian=false) -> ParaEigen
+
+Eigendecomposition of `M` sampled on the grid of its independent parameters;
+callable (`F(p) == eigen(M(p))`), `F.values`/`F.vectors` are sequences over `F.ts`.
+"""
+function LinearAlgebra.eigen(M::BlockParaMatrix; nsample::Int=24, ishermitian::Bool=false)
+    ts = _paramgrid_n(M.nparams, nsample)
+    wrap = ishermitian ? Hermitian : identity
+    return ParaEigen(M, ts, [eigen(wrap(Matrix(M(t)))) for t in ts], ishermitian)
+end
+function LinearAlgebra.eigvals(M::BlockParaMatrix; nsample::Int=24, ishermitian::Bool=false)
+    wrap = ishermitian ? Hermitian : identity
+    return [eigvals(wrap(Matrix(M(t)))) for t in _paramgrid_n(M.nparams, nsample)]
+end
+
+"""
+    svd(M::BlockParaMatrix; nsample=24) -> ParaSVD
+
+SVD of `M` sampled on the grid of its independent parameters; callable
+(`F(p) == svd(M(p))`), exposing `F.U`/`F.S`/`F.V` as sequences over `F.ts`.
+"""
+function LinearAlgebra.svd(M::BlockParaMatrix; nsample::Int=24)
+    ts = _paramgrid_n(M.nparams, nsample)
+    return ParaSVD(M, ts, [svd(Matrix(M(t))) for t in ts])
+end
+function LinearAlgebra.svdvals(M::BlockParaMatrix; nsample::Int=24)
+    return [svdvals(Matrix(M(t))) for t in _paramgrid_n(M.nparams, nsample)]
 end
