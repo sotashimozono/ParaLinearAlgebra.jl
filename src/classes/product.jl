@@ -19,8 +19,26 @@ function powers(pc::ProductClass)
 end
 nbasis(pc::ProductClass) = prod(map(nbasis, pc.classes))
 
+# A multi-parameter object MUST be evaluated at one value per axis (a tuple/vector).
+# A scalar (or wrong-length) argument used to be SILENTLY mis-evaluated — `map` over
+# the class tuple and a scalar zipped to length 1, so `A(0.2)` returned a garbage
+# 1-term sum instead of erroring. Validate the arity loudly instead.
+function _check_arity(pc::ProductClass, ps)
+    n = length(pc.classes)
+    ok = (ps isa Tuple || ps isa AbstractVector) && length(ps) == n
+    ok || throw(
+        ArgumentError(
+            "a $n-parameter ProductClass must be evaluated at a tuple/vector of $n " *
+            "parameters (one per axis); got $(typeof(ps))" *
+            ((ps isa Tuple || ps isa AbstractVector) ? " of length $(length(ps))" : ""),
+        ),
+    )
+    return nothing
+end
+
 function basis(pc::ProductClass, ps)
-    bs = map(basis, pc.classes, ps)
+    _check_arity(pc, ps)
+    bs = map(basis, pc.classes, Tuple(ps))   # Tuple(ps): keep `bs` a tuple ⇒ N-D CartesianIndices
     return vec([
         prod(bs[d][I[d]] for d in eachindex(bs)) for I in CartesianIndices(map(length, bs))
     ])
@@ -31,6 +49,7 @@ end
 function basis_deriv(pc::ProductClass, ps, dim::Integer)
     1 ≤ dim ≤ length(pc.classes) ||
         throw(ArgumentError("dim=$dim out of range 1:$(length(pc.classes))"))
+    _check_arity(pc, ps)
     # keep `bs` a TUPLE so `map(length, bs)` is a tuple and CartesianIndices is N-D
     bs = ntuple(
         d -> d == dim ? basis_deriv(pc.classes[d], ps[d]) : basis(pc.classes[d], ps[d]),
