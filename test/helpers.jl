@@ -17,6 +17,20 @@ end
 _sortc(v) = sort(v; by=z -> (real(z), imag(z)))
 _circle_pts(n) = collect(range(0, 1; length=n + 1))[1:n]   # = the package's internal grid
 
+# order-independent spectrum match: greedily pair each computed eigenvalue with the
+# nearest expected one. Robust to LAPACK ulp-noise that flips sort tie-breaks (e.g.
+# a conjugate pair a±bi whose real parts are equal by construction).
+function specmatch(computed, expected; atol=1e-8)
+    length(computed) == length(expected) || return false
+    pool = collect(ComplexF64, expected)
+    for x in computed
+        i = argmin(abs.(pool .- x))
+        abs(pool[i] - x) ≤ atol || return false
+        deleteat!(pool, i)
+    end
+    return true
+end
+
 # the L² function norm by independent quadrature (cross-checks `norm(::ParaMatrix)`)
 function l2norm_quad(A; N=2048)
     pts = range(0, 1; length=N + 1)[1:N]
