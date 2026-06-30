@@ -50,6 +50,7 @@ include("classes/product.jl")
 # solver: algorithms on a ParaMatrix
 include("solver/spectral.jl")
 include("solver/factorizations.jl")
+include("solver/geometry.jl")
 include("solver/equations.jl")
 
 # utils
@@ -71,6 +72,8 @@ export para, paraconj, parahermitianpart, isparahermitian, isparaunitary, isposi
 export ParaEigen, ParaSVD, ParaQR, ParaLQ, ParaLU, ParaPolar, polar, numerical_rank
 # solver — spectral / equations
 export para_gram, spectral_factor, leading_eigen, lyapd, cocycle_exponent, para_solve
+# solver — quantum geometry over a parameter manifold
+export quantum_geometric_tensor, fubini_study_metric, berry_curvature, chern_number
 # utils
 export on_circle, rank_profile, optimize!
 
