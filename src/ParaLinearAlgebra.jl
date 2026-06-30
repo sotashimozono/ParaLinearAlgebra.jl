@@ -65,7 +65,7 @@ export paraeye, ⊗
 # classes
 export Fourier, Laurent, Analytic, Polynomial, ProductClass
 # para-structure
-export para, paraconj, isparahermitian, isparaunitary, ispositive
+export para, paraconj, parahermitianpart, isparahermitian, isparaunitary, ispositive
 # solver — factorizations dispatch on the STANDARD verbs (eigen/svd/qr/lq/lu/
 # eigvals/svdvals/pinv) for ParaMatrix; these are the returned objects + polar.
 export ParaEigen, ParaSVD, ParaQR, ParaLQ, ParaLU, ParaPolar, polar, numerical_rank

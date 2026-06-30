@@ -187,6 +187,30 @@ function Base.getindex(A::ParaMatrix, I::AbstractVector, J::AbstractVector)
     return ParaMatrix([c[I, J] for c in A.coeffs], A.class)
 end
 
+"""
+    diag(A::ParaMatrix) -> Vector{<:ParaMatrix}
+
+The diagonal as the vector of scalar (1×1) parameterized entries `A[i,i]`. For a
+square `A`, `sum(diag(A)) == tr(A)`, and `diagm(diag(A))` rebuilds the diagonal part.
+"""
+LinearAlgebra.diag(A::ParaMatrix) = [A[i, i] for i in 1:minimum(size(A))]
+
+"""
+    diagm(ds::AbstractVector{<:ParaMatrix}) -> ParaMatrix
+
+Build a diagonal ParaMatrix from scalar (1×1) parameterized entries of a common
+class: `diagm(ds)(θ) = Diagonal([d(θ) for d in ds])`.
+"""
+function LinearAlgebra.diagm(ds::AbstractVector{<:ParaMatrix})
+    isempty(ds) && error("diagm needs at least one entry")
+    cls = function_class(first(ds))
+    all(function_class(d) == cls for d in ds) || error("diagm entries need a common class")
+    all(size(d) == (1, 1) for d in ds) || error("diagm entries must be 1×1 (scalar)")
+    n = length(ds)
+    coeffs = [Matrix(Diagonal([ds[i].coeffs[k][1, 1] for i in 1:n])) for k in 1:nbasis(cls)]
+    return ParaMatrix(coeffs, cls)
+end
+
 function Base.hcat(As::ParaMatrix...)
     cls = As[1].class
     all(A.class == cls for A in As) || error("hcat needs a common class")

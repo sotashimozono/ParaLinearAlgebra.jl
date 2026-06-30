@@ -59,6 +59,24 @@ function para(A::ParaMatrix{T,S,<:Laurent}) where {T,S}
 end
 const paraconj = para
 
+"""
+    parahermitianpart(A) -> ParaMatrix
+
+The para-Hermitian part `(A + para(A))/2` (so `isparahermitian` holds for the
+result). Requires a symmetric window `Laurent(-L, L)` so that `A` and `para(A)`
+share a class; this is the natural domain of para-Hermitian objects.
+"""
+function parahermitianpart(A::ParaMatrix{T,S,<:Laurent}) where {T,S}
+    c = A.class
+    c.lo == -c.hi || throw(
+        ArgumentError(
+            "parahermitianpart needs a symmetric window Laurent(-L,L); got $(c) " *
+            "(the para-Hermitian part otherwise lives in the wider window Laurent(-$(max(c.hi,-c.lo)),$(max(c.hi,-c.lo))))",
+        ),
+    )
+    return 0.5 * (A + para(A))
+end
+
 # on the circle the conjugate-transpose IS the para-adjoint
 Base.adjoint(A::ParaMatrix{T,S,<:Laurent}) where {T,S} = para(A)
 
