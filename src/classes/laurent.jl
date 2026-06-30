@@ -21,6 +21,13 @@ struct Laurent <: RingClass
     end
 end
 Laurent(L::Int) = Laurent(-L, L)
+
+"""
+    Analytic(L) = Laurent(0, L)
+
+One-sided (causal / outer) Laurent window `0:L` — the class of analytic outer
+factors (e.g. the result of [`spectral_factor`](@ref)).
+"""
 Analytic(L::Int) = Laurent(0, L)
 
 powers(c::Laurent) = (c.lo):(c.hi)

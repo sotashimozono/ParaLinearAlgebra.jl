@@ -27,6 +27,12 @@ function _posphase!(Q, R)
 end
 
 # ---------- eigen ----------------------------------------------------------
+"""
+    ParaEigen
+
+Sampled eigendecomposition of a `ParaMatrix` returned by [`eigen`](@ref); callable
+(`F(θ)`) and exposing `F.values`, `F.vectors`, `F.ts`.
+"""
 struct ParaEigen{PM<:ParaMatrix,F}
     parent::PM
     ts::Vector{Float64}
@@ -78,6 +84,12 @@ function LinearAlgebra.eigvals(A::ParaMatrix; nsample::Int=128)
 end
 
 # ---------- svd ------------------------------------------------------------
+"""
+    ParaSVD
+
+Sampled SVD of a `ParaMatrix` returned by [`svd`](@ref); callable (`F(θ)`) and
+exposing `F.U`, `F.S`, `F.V`, `F.ts`.
+"""
 struct ParaSVD{PM<:ParaMatrix,F}
     parent::PM
     ts::Vector{Float64}
@@ -137,6 +149,12 @@ function _qr_gauged(M::AbstractMatrix)
     return (; Q, R)
 end
 
+"""
+    ParaQR
+
+Sampled QR (canonical continuity gauge) of a `ParaMatrix` returned by [`qr`](@ref);
+callable (`F(θ)`) and exposing `F.Q`, `F.R`, `F.ts`.
+"""
 struct ParaQR{PM<:ParaMatrix,F}
     parent::PM
     ts::Vector{Float64}
@@ -161,13 +179,14 @@ function Base.getproperty(F::ParaQR, s::Symbol)
     return getfield(F, s)
 end
 Base.propertynames(::ParaQR) = (:parent, :ts, :facts, :Q, :R)
-Base.iterate(F::ParaQR, st::Int=1) = if st == 1
-    (F.Q, 2)
-elseif st == 2
-    (F.R, 3)
-else
-    nothing
-end
+Base.iterate(F::ParaQR, st::Int=1) =
+    if st == 1
+        (F.Q, 2)
+    elseif st == 2
+        (F.R, 3)
+    else
+        nothing
+    end
 Base.length(::ParaQR) = 2
 
 function _lq_gauged(M::AbstractMatrix)
@@ -183,6 +202,12 @@ function _lq_gauged(M::AbstractMatrix)
     return (; L, Q)
 end
 
+"""
+    ParaLQ
+
+Sampled LQ (canonical continuity gauge) of a `ParaMatrix` returned by [`lq`](@ref);
+callable (`F(θ)`) and exposing `F.L`, `F.Q`, `F.ts`.
+"""
 struct ParaLQ{PM<:ParaMatrix,F}
     parent::PM
     ts::Vector{Float64}
@@ -206,16 +231,23 @@ function Base.getproperty(F::ParaLQ, s::Symbol)
     return getfield(F, s)
 end
 Base.propertynames(::ParaLQ) = (:parent, :ts, :facts, :L, :Q)
-Base.iterate(F::ParaLQ, st::Int=1) = if st == 1
-    (F.L, 2)
-elseif st == 2
-    (F.Q, 3)
-else
-    nothing
-end
+Base.iterate(F::ParaLQ, st::Int=1) =
+    if st == 1
+        (F.L, 2)
+    elseif st == 2
+        (F.Q, 3)
+    else
+        nothing
+    end
 Base.length(::ParaLQ) = 2
 
 # ---------- lu -------------------------------------------------------------
+"""
+    ParaLU
+
+Sampled LU (partial pivoting) of a `ParaMatrix` returned by [`lu`](@ref); callable
+(`F(θ)`) and exposing `F.L`, `F.U`, `F.p`, `F.ts`.
+"""
 struct ParaLU{PM<:ParaMatrix,F}
     parent::PM
     ts::Vector{Float64}
@@ -254,6 +286,12 @@ end
 Base.length(::ParaLU) = 3
 
 # ---------- polar (no stdlib verb; new export) -----------------------------
+"""
+    ParaPolar
+
+Sampled polar decomposition of a `ParaMatrix` returned by [`polar`](@ref); callable
+(`F(θ)`) and exposing `F.U`, `F.P`, `F.ts`.
+"""
 struct ParaPolar{PM<:ParaMatrix,F}
     parent::PM
     ts::Vector{Float64}
@@ -283,13 +321,14 @@ function Base.getproperty(F::ParaPolar, s::Symbol)
     return getfield(F, s)
 end
 Base.propertynames(::ParaPolar) = (:parent, :ts, :facts, :U, :P)
-Base.iterate(F::ParaPolar, st::Int=1) = if st == 1
-    (F.U, 2)
-elseif st == 2
-    (F.P, 3)
-else
-    nothing
-end
+Base.iterate(F::ParaPolar, st::Int=1) =
+    if st == 1
+        (F.U, 2)
+    elseif st == 2
+        (F.P, 3)
+    else
+        nothing
+    end
 Base.length(::ParaPolar) = 2
 
 # ---------- regularized pseudo-inverse (SVD divergence removal) -------------

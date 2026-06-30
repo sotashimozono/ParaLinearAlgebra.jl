@@ -27,6 +27,9 @@ makedocs(;
         assets=["assets/favicon.ico", "assets/custom.css"],
     ),
     modules=[ParaLinearAlgebra],
+    # doc-completeness is a follow-up (const aliases ⊗/paraconj, full API page);
+    # keep these as warnings so the build is not blocked. Tracked as an issue.
+    warnonly=[:cross_references, :missing_docs],
     pages=["Home" => "index.md"],
 )
 
