@@ -17,6 +17,7 @@ Random = "1.10"
 SparseArrays = "1.10"
 StaticArrays = "1"
 Test = "1.10"
+Zygote = "0.6, 0.7"
 julia = "1.10"
 
 [extras]
@@ -25,6 +26,7 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7ce9b"
 
 [targets]
-test = ["Test", "Aqua", "Random", "SparseArrays", "StaticArrays"]
+test = ["Test", "Aqua", "Random", "SparseArrays", "StaticArrays", "Zygote"]

@@ -87,8 +87,13 @@ function ChainRulesCore.rrule(::typeof(kron), A::ParaMatrix, B::ParaMatrix)
     dB1, dB2 = size(B)
     function kron_back(Ȳ)
         oc = _ctc(Ȳ)
-        Ā = [zeros(eltype(A.coeffs[1]), dA1, dA2) for _ in pA]
-        B̄ = [zeros(eltype(B.coeffs[1]), dB1, dB2) for _ in pB]
+        # accumulate in the promoted type of (coeff, cotangent): a real coeff with a
+        # complex cotangent (e.g. mixed real/complex factors) must not be forced to
+        # the coeff eltype. ChainRules' ProjectTo then maps it back to the primal type.
+        TĀ = promote_type(eltype(A.coeffs[1]), eltype(oc[1]))
+        TB̄ = promote_type(eltype(B.coeffs[1]), eltype(oc[1]))
+        Ā = [zeros(TĀ, dA1, dA2) for _ in pA]
+        B̄ = [zeros(TB̄, dB1, dB2) for _ in pB]
         for i in eachindex(pA), j in eachindex(pB)
             R = oc[pos[pA[i] + pB[j]]]
             Ai = A.coeffs[i]
