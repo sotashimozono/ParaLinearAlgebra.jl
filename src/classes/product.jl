@@ -64,6 +64,14 @@ function basis_gram(pc::ProductClass)
     return M
 end
 
+# separable integral:  (∫∏ wᵈ) = ∏ (∫ wᵈ)
+function basis_integral(pc::ProductClass)
+    vs = map(basis_integral, pc.classes)
+    return vec([
+        prod(vs[d][I[d]] for d in eachindex(vs)) for I in CartesianIndices(map(length, vs))
+    ])
+end
+
 function _prodclass(a::ProductClass, b::ProductClass)
     return ProductClass(map(_prodclass, a.classes, b.classes))
 end

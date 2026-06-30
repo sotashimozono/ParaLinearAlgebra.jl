@@ -202,18 +202,41 @@ end
 LinearAlgebra.tr(A::ParaMatrix) = ParaMatrix([fill(tr(c), 1, 1) for c in A.coeffs], A.class)
 
 """
+    dot(A::ParaMatrix, B::ParaMatrix) -> Number
+
+The `L²` (Frobenius-integrated) inner product of two same-class parameterized
+matrices, `⟨A,B⟩ = ∫₀¹ ⟨A(θ),B(θ)⟩_F dθ = Σ_{kl} M_{kl} ⟨Aₖ,Bₗ⟩_F`, with the
+basis Gram `M = basis_gram(class)` (uniform measure on the torus). This is the
+substrate for parameter-geometry: Berry connection `⟨ψ,∂_θ ψ⟩` and the
+Fubini–Study / quantum metric are built from `dot` of states and their
+`evaluate_deriv`s by a downstream layer.
+"""
+function LinearAlgebra.dot(A::ParaMatrix, B::ParaMatrix)
+    A.class == B.class || error("dot needs a common class: $(A.class) vs $(B.class)")
+    M = basis_gram(A.class)
+    n = nterms(A)
+    return sum(M[k, l] * dot(A.coeffs[k], B.coeffs[l]) for k in 1:n, l in 1:n)
+end
+
+"""
     norm(A::ParaMatrix, p=2) -> Real
 
-The `L²` function norm `‖A‖ = sqrt(∫₀¹ ‖A(θ)‖_F² dθ)`, computed exactly from the
-coefficients via the basis Gram (see [`basis_gram`](@ref)):
-`‖A‖² = Σ_{kl} M_{kl} ⟨Aₖ,Aₗ⟩_F`. For an orthonormal basis ([`Laurent`](@ref))
-this is Parseval `sqrt(Σ‖Aₖ‖²)`; for `Fourier`/`Polynomial` the Gram supplies the
-correct cross/weight factors.
+The `L²` function norm `‖A‖ = sqrt(∫₀¹ ‖A(θ)‖_F² dθ) = sqrt(real⟨A,A⟩)` (see
+[`dot`](@ref)). For an orthonormal basis ([`Laurent`](@ref)) this is Parseval
+`sqrt(Σ‖Aₖ‖²)`; for `Fourier`/`Polynomial` the Gram supplies the weight factors.
 """
 function LinearAlgebra.norm(A::ParaMatrix, p::Real=2)
     p == 2 || error("only the L² norm (p=2) is defined for a ParaMatrix")
-    M = basis_gram(A.class)
-    n = nterms(A)
-    s = sum(M[k, l] * dot(A.coeffs[k], A.coeffs[l]) for k in 1:n, l in 1:n)
-    return sqrt(max(real(s), zero(real(s))))
+    return sqrt(max(real(dot(A, A)), 0.0))
+end
+
+"""
+    integral(A::ParaMatrix) -> AbstractMatrix
+
+The parameter integral `∫₀¹ A(θ) dθ = Σ_k basis_integral(class)_k · coeffsₖ`
+(uniform measure). For [`Laurent`](@ref) this is the zero-mode `coeff(A, 0)`; for
+[`Fourier`](@ref) the constant term. The mean of `A(θ)` over the torus.
+"""
+function integral(A::ParaMatrix)
+    return sum(w * c for (w, c) in zip(basis_integral(A.class), A.coeffs))
 end

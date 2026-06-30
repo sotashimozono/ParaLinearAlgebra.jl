@@ -49,3 +49,6 @@ end
 
 # L² Gram over [0,1):  ∫1²=1, ∫cos²(2πkθ)=∫sin²(2πkθ)=½, all cross terms 0.
 basis_gram(c::Fourier) = Matrix(Diagonal([1.0; fill(0.5, 2c.K)]))
+
+# ∫₀¹: only the constant term survives (∫cos = ∫sin = 0)
+basis_integral(c::Fourier) = [k == 1 ? 1.0 : 0.0 for k in 1:(2c.K + 1)]
