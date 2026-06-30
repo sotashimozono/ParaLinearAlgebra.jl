@@ -4,19 +4,7 @@
 # A faithful library must reproduce these from its own `inv`/`para`/`*`/`det`/
 # `eigvals` — non-tautological because the expected answers are pure group theory.
 
-# order-independent spectrum match: greedily pair each computed eigenvalue with the
-# nearest expected one (robust to LAPACK ulp-noise that makes sort tie-breaks flip,
-# e.g. for a conjugate pair a±bi whose real parts are equal by construction).
-function specmatch(computed, expected; atol=1e-8)
-    length(computed) == length(expected) || return false
-    pool = collect(ComplexF64, expected)
-    for x in computed
-        i = argmin(abs.(pool .- x))
-        abs(pool[i] - x) ≤ atol || return false
-        deleteat!(pool, i)
-    end
-    return true
-end
+# `specmatch` (order-independent spectrum compare) lives in test/helpers.jl.
 
 # check the group laws for a one-parameter para-unitary group D with known D(θ) and det
 function check_group(D, Dknown, detknown)
