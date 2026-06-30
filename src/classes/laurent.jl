@@ -50,14 +50,28 @@ basis_integral(c::Laurent) = [k == 0 ? 1.0 : 0.0 for k in powers(c)]
 
 # `paraeye`/`one` are generic over RingClass (defined in core/paramatrix.jl).
 
-# para-adjoint  Ã(z) = A(1/z̄)†  ⇒  Ã_m = (A_{-m})†, window negates
 _adj(c) = copy(c')
+
+"""
+    para(A) -> ParaMatrix
+    paraconj(A)
+
+The para-adjoint (para-conjugate) `Ã(z) = A(1/z̄)†` of a Laurent ParaMatrix: on the
+unit circle it equals the conjugate-transpose, `para(A)(θ) = A(θ)'`. The
+coefficient rule is `Ãₘ = (A₋ₘ)†` (the power window negates). Also reachable as `A'`.
+"""
 function para(A::ParaMatrix{T,S,<:Laurent}) where {T,S}
     c = A.class
     nc = Laurent(-c.hi, -c.lo)
     return ParaMatrix([_adj(coeff(A, -m)) for m in powers(nc)], nc)
 end
-const paraconj = para
+
+"""
+    paraconj(A)
+
+Alias for the para-adjoint [`para`](@ref).
+"""
+paraconj(A) = para(A)
 
 """
     parahermitianpart(A) -> ParaMatrix

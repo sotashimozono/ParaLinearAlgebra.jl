@@ -147,7 +147,13 @@ function Base.kron(A::ParaMatrix, B::ParaMatrix)
     _assert_ring(B)
     return _convolve(kron, A, B)
 end
-const ⊗ = kron
+"""
+    ⊗(A, B)
+
+Infix Kronecker product `A ⊗ B = kron(A, B)` (coefficient-convolution kron of two
+ParaMatrices).
+"""
+⊗(A, B) = kron(A, B)
 
 function Base.:^(A::ParaMatrix, n::Integer)
     _assert_ring(A)
