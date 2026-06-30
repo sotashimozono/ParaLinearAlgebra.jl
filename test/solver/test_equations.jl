@@ -3,7 +3,7 @@
 
 @testset "lyapd solves the Stein equation (ρ<1)" begin
     for seed in SEEDS
-        A = 0.2 * randpm(3, Laurent(-1, 1); seed=seed)
+        A = contractive(randpm(3, Laurent(-1, 1); seed=seed); nsample=8)   # ρ(A(θ)) < 1
         C = randpm(3, Laurent(-1, 1); seed=seed + 12)
         Q = para(C) * C
         ts, Xs = lyapd(A, Q; nsample=8)
@@ -15,6 +15,19 @@
     # guard: ρ(A) ≥ 1 has no bounded solution ⇒ error, not garbage
     bigA = ParaMatrix([fill(2.0 + 0im, 1, 1)], Laurent(0, 0))
     @test_throws ArgumentError lyapd(bigA, paraeye(1, ComplexF64, Laurent(0, 0)))
+
+    # cross-check the O(n³) Schur solve against the independent O(n⁶) kron solve
+    for seed in SEEDS
+        A = contractive(randpm(4, Laurent(-1, 1); seed=seed + 99); nsample=6)   # ρ(A(θ)) < 1
+        C = randpm(4, Laurent(-1, 1); seed=seed + 7)
+        Q = para(C) * C
+        _, Xs = lyapd(A, Q; nsample=6)
+        for (i, t) in enumerate(_circle_pts(6))
+            At, Qt = Matrix(A(t)), Matrix(Q(t))
+            Xkron = reshape((I - kron(conj(At), At)) \ vec(Qt), 4, 4)   # independent algorithm
+            @test Xs[i] ≈ (Xkron + Xkron') / 2 atol = 1e-8
+        end
+    end
 end
 
 @testset "cocycle_exponent" begin
