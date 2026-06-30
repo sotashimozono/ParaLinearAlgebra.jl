@@ -42,9 +42,32 @@ end
     D = ParaMatrix([ComplexF64[1 0; 0 0], ComplexF64[0 0; 0 1]], Analytic(1))
     @test isparaunitary(D)
     for θ in RNG_PTS
-        @test inv(D)(θ) ≈ inv(D(θ)) atol = 1e-10
+        @test inv(D)(θ) ≈ inv(D(θ)) atol = 1e-10            # para-unitary: exact (= para)
     end
-    @test_throws ErrorException inv(randpm(2, Laurent(-1, 1); seed=3))  # not para-unitary
+end
+
+@testset "general (rational) inverse via Laurent fit" begin
+    # A = I + B with ‖B(θ)‖ ≤ 0.3 ⇒ A⁻¹ = Σ(−B)ⁿ is analytic on the circle, so the
+    # Laurent fit converges and matches the pointwise inverse.
+    for d in (2, 3), seed in SEEDS
+        A =
+            paraeye(d, ComplexF64, Laurent(-1, 1)) +
+            contractive(randpm(d, Laurent(-1, 1); seed=seed); bound=0.3, nsample=64)
+        Ai = inv(A; order=20)
+        @test Ai isa ParaMatrix
+        for θ in RNG_PTS
+            @test Ai(θ) ≈ inv(A(θ)) atol = 1e-6
+            @test A(θ) * Ai(θ) ≈ I atol = 1e-6
+        end
+    end
+    # too-low order ⇒ @warn (the inverse genuinely needs more Laurent terms)
+    Aw =
+        paraeye(2, ComplexF64, Laurent(-1, 1)) +
+        contractive(randpm(2, Laurent(-1, 1); seed=2); bound=0.5, nsample=64)
+    @test_logs (:warn,) inv(Aw; order=2)
+    # cross-class product is rejected with a ProductClass hint
+    @test_throws ErrorException randpm(2, Laurent(-1, 1); seed=1) *
+        randpm(2, Polynomial(1); seed=1)
 end
 
 @testset "parahermitianpart + para-Hermitian closure" begin

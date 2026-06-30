@@ -113,3 +113,12 @@ The class of a product `A*B` of parameterized matrices (power windows add).
 Defined per ring-class pair in `classes/`.
 """
 function _prodclass end
+
+# different ring classes have no common single-parameter product (they depend on
+# different parameters) — the same-class methods in classes/ are more specific and win.
+function _prodclass(a::RingClass, b::RingClass)
+    return error(
+        "cannot combine different ring classes ($(a) × $(b)); they parameterize over " *
+        "different variables — use a `ProductClass` for a genuinely multi-parameter object",
+    )
+end
