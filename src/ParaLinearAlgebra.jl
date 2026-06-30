@@ -57,8 +57,10 @@ include("utils/utils.jl")
 
 # ---- exports ----
 # core
-export FunctionClass, RingClass, basis, basis_deriv, basis_gram, nbasis, powers
+export FunctionClass,
+    RingClass, basis, basis_deriv, basis_gram, basis_integral, nbasis, powers
 export ParaMatrix, evaluate, evaluate_deriv, coefficients, function_class, coeff, nterms
+export integral
 export paraeye, ⊗
 # classes
 export Fourier, Laurent, Analytic, Polynomial, ProductClass

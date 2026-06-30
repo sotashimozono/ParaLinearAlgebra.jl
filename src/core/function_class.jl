@@ -71,12 +71,21 @@ end
 """
     basis_gram(c::FunctionClass) -> AbstractMatrix
 
-The `nbasis × nbasis` Gram matrix `M_{kl} = ∫ wₖ(θ) conj(wₗ(θ)) dθ` of the basis
-over one period — the metric that turns coefficient inner products into the
-`L²` function inner product, `⟨A,B⟩_{L²} = Σ_{kl} M_{kl} ⟨Aₖ,Bₗ⟩_F`. Used by
-[`norm`](@ref); `M = I` exactly for an L²-orthonormal basis ([`Laurent`](@ref)).
+The `nbasis × nbasis` Gram matrix `M_{kl} = ∫ conj(wₖ(θ)) wₗ(θ) dθ` of the basis
+over one period (uniform measure) — the metric that turns coefficient inner
+products into the `L²` function inner product, `⟨A,B⟩_{L²} = Σ_{kl} M_{kl} ⟨Aₖ,Bₗ⟩_F`.
+Used by [`dot`](@ref) and [`norm`](@ref); `M = I` for an L²-orthonormal basis
+([`Laurent`](@ref)).
 """
 function basis_gram end
+
+"""
+    basis_integral(c::FunctionClass) -> AbstractVector
+
+The integrals `∫₀¹ wₖ(θ) dθ` of the basis weights over one period (uniform
+measure). Used by [`integral`](@ref): `∫₀¹ A(θ) dθ = Σ_k basis_integral(c)_k · coeffsₖ`.
+"""
+function basis_integral end
 
 """
     powers(c::FunctionClass)

@@ -24,4 +24,7 @@ end
 # L² Gram over [0,1):  ∫ θ^k θ^l dθ = 1/(k+l+1)  (a Hilbert-type matrix)
 basis_gram(c::Polynomial) = [1.0 / (k + l + 1) for k in 0:(c.N), l in 0:(c.N)]
 
+# ∫₀¹ θ^k dθ = 1/(k+1)
+basis_integral(c::Polynomial) = [1.0 / (k + 1) for k in 0:(c.N)]
+
 _prodclass(a::Polynomial, b::Polynomial) = Polynomial(a.N + b.N)

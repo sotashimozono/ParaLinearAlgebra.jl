@@ -45,6 +45,9 @@ _prodclass(a::Laurent, b::Laurent) = Laurent(a.lo + b.lo, a.hi + b.hi)
 # {exp(2πikθ)} is L²-orthonormal on [0,1) ⇒ the Gram is the identity (exact Parseval).
 basis_gram(c::Laurent) = Matrix{Float64}(I, nbasis(c), nbasis(c))
 
+# ∫₀¹ e^{2πikθ} dθ = δ_{k,0}: only the k=0 coefficient survives
+basis_integral(c::Laurent) = [k == 0 ? 1.0 : 0.0 for k in powers(c)]
+
 # `paraeye`/`one` are generic over RingClass (defined in core/paramatrix.jl).
 
 # para-adjoint  Ã(z) = A(1/z̄)†  ⇒  Ã_m = (A_{-m})†, window negates
