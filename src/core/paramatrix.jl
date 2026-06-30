@@ -269,10 +269,10 @@ LinearAlgebra.tr(A::ParaMatrix) = ParaMatrix([fill(tr(c), 1, 1) for c in A.coeff
 
 The `L²` (Frobenius-integrated) inner product of two same-class parameterized
 matrices, `⟨A,B⟩ = ∫₀¹ ⟨A(θ),B(θ)⟩_F dθ = Σ_{kl} M_{kl} ⟨Aₖ,Bₗ⟩_F`, with the
-basis Gram `M = basis_gram(class)` (uniform measure on the torus). This is the
-substrate for parameter-geometry: Berry connection `⟨ψ,∂_θ ψ⟩` and the
-Fubini–Study / quantum metric are built from `dot` of states and their
-`evaluate_deriv`s by a downstream layer.
+basis Gram `M = basis_gram(class)` (uniform measure on the torus). Together with
+`evaluate_deriv` it is the substrate a downstream layer can use for differential
+geometry of the parameterization (inner products of states and their
+parameter-derivatives).
 """
 function LinearAlgebra.dot(A::ParaMatrix, B::ParaMatrix)
     A.class == B.class || error("dot needs a common class: $(A.class) vs $(B.class)")

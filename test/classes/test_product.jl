@@ -1,6 +1,5 @@
-# tests src/classes/product.jl — the multi-parameter ring class (twist-torus /
-# many-body-Chern territory): evaluate, 2-D convolution, multi-axis para-adjoint,
-# per-axis ∂, and the separable L² Gram.
+# tests src/classes/product.jl — the multi-parameter ring class: evaluate, 2-D
+# convolution, multi-axis para-adjoint, per-axis ∂, and the separable L² Gram.
 
 @testset "ProductClass evaluate + 2-D convolution + para" begin
     pc = ProductClass(Laurent(-1, 1), Laurent(-1, 1))

@@ -10,7 +10,7 @@
 
 Complex Laurent series in the angle `θ ∈ R/Z`, weights `exp(2πi k θ)` for
 `k = lo:hi`. The ring class for ParaMatrix products and the para-adjoint;
-the natural class for twisted-boundary / flux parameters.
+the natural class for periodic (angle) parameters.
 """
 struct Laurent <: RingClass
     lo::Int
