@@ -107,3 +107,35 @@ function para_qr(
     isometry = maximum(norm(Matrix(Q(t))' * Matrix(Q(t)) - Id) for t in grid)
     return (; Q=Q, R=R, residual=residual, isometry=isometry)
 end
+
+"""
+    para_lq(A; N=24, order=12, rankatol=1e-8) -> (; L, Q, residual, isometry)
+
+Parameterized LQ of a wide/square Laurent `ParaMatrix` `A` (`m×n`, full **row**
+rank on the circle): `A = L·Q` with `L` the analytic L-factor and `Q`
+**para-unitary by rows** (`Q·para(Q) = I`), both returned as ParaMatrices. The
+mirror of [`para_qr`](@ref): `L` is obtained **exactly** as the spectral factor of
+`A·para(A) = L·para(L)`, and `Q = L⁻¹·A`. `residual = max_θ‖A − LQ‖`,
+`isometry = max_θ‖Q(θ)para(Q)(θ) − I‖`. `L` is the exact gauge to absorb when
+right-canonicalizing a parameterized tensor.
+"""
+function para_lq(
+    A::ParaMatrix{T,S,<:Laurent}; N::Int=24, order::Int=12, rankatol::Real=1e-8
+) where {T,S}
+    m, n = size(A)
+    n ≥ m ||
+        throw(DimensionMismatch("para_lq needs a wide/square A (n ≥ m); got $(m)×$(n)"))
+    G = A * para(A)                          # m×m para-Hermitian; PD iff A is full row rank
+    ispositive(G; tol=rankatol) || error(
+        "para_lq: A(θ) is not full row rank on the circle (the Gram A·para(A) drops below " *
+        "`rankatol`=$(rankatol)); LQ with a para-unitary Q is undefined at a rank drop",
+    )
+    L = spectral_factor(G; N=N)              # G = L·para(L) — the L-factor (analytic)
+    L⁻¹ = inv(L; order=order)                # rational; @warns if the Laurent fit needs more order
+    Q = L⁻¹ * A
+    Id = Matrix{complex(float(T))}(I, m, m)
+    grid = range(0, 1; length=(4N + 1))[1:(4N)]
+    residual = maximum(norm(Matrix(A(t)) - Matrix(L(t)) * Matrix(Q(t))) for t in grid)
+    isometry = maximum(norm(Matrix(Q(t)) * Matrix(Q(t))' - Id) for t in grid)
+    return (; L=L, Q=Q, residual=residual, isometry=isometry)
+end
