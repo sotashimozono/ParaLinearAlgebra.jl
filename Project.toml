@@ -3,9 +3,26 @@ uuid = "2052d01f-8cd7-4b40-b323-60eaee3f0f77"
 version = "0.1.0"
 authors = ["sota shimozono <shimozono-sota631@g.ecc.u-tokyo.ac.jp>"]
 
+[deps]
+ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[compat]
+Aqua = "0.8"
+ChainRulesCore = "1"
+LinearAlgebra = "1.10"
+Random = "1.10"
+SparseArrays = "1.10"
+StaticArrays = "1"
+Test = "1.10"
+julia = "1.10"
+
 [extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "Aqua"]
+test = ["Test", "Aqua", "Random", "SparseArrays", "StaticArrays"]

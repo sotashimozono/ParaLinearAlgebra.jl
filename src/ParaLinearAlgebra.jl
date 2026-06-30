@@ -1,5 +1,69 @@
+"""
+    ParaLinearAlgebra
+
+A generic, backend-agnostic algebra for **parameterized matrices**
+`A(p) = Σ_k basis(class, p)_k · coeffs_k`, with automatic differentiation in the
+coefficients and parameter-derivatives for quantum-geometry.
+
+The package is layered so the abstract backend never depends on any specific
+function type:
+
+- `core/`    — the [`FunctionClass`](@ref) interface and the [`ParaMatrix`](@ref)
+               type with its class-agnostic algebra (`evaluate`, the callable
+               `A(p)`, ring ops, AD rrules).
+- `classes/` — concrete function types as plug-ins: [`Fourier`](@ref) (ansatz),
+               [`Laurent`](@ref)/[`Analytic`](@ref) (ring + para-adjoint),
+               [`Polynomial`](@ref), [`ProductClass`](@ref).
+- `solver/`  — algorithms on a `ParaMatrix`: [`spectral_factor`](@ref),
+               [`para_gram`](@ref), [`leading_eigen`](@ref), [`lyapd`](@ref),
+               [`cocycle_exponent`](@ref), [`para_solve`](@ref).
+- `utils/`   — [`on_circle`](@ref), `rank`/[`rank_profile`](@ref), [`optimize!`](@ref).
+
+UI follows the Julia ecosystem: a `ParaMatrix` is **callable** (`A(p)` → a dense
+matrix, so all of `LinearAlgebra` works pointwise); in-class operations reuse the
+standard verbs (`det`, `inv`, `tr`, `norm`, `kron`, `adjoint`/`'`, `ishermitian`,
+`isposdef`, `\\`); iterative-style solvers return `(…, info)` à la KrylovKit.
+"""
 module ParaLinearAlgebra
 
-greet() = print("Hello World!")
+using LinearAlgebra
+using ChainRulesCore
+using ChainRulesCore: rrule, NoTangent, ZeroTangent, AbstractZero, Tangent, unthunk
+
+# core: abstract interface + central type + AD
+include("core/function_class.jl")
+include("core/paramatrix.jl")
+include("core/chainrules.jl")
+
+# classes: concrete function-type plug-ins
+include("classes/fourier.jl")
+include("classes/laurent.jl")
+include("classes/polynomial.jl")
+include("classes/product.jl")
+
+# solver: algorithms on a ParaMatrix
+include("solver/spectral.jl")
+include("solver/factorizations.jl")
+include("solver/equations.jl")
+
+# utils
+include("utils/utils.jl")
+
+# ---- exports ----
+# core
+export FunctionClass, basis, basis_deriv, nbasis, powers
+export ParaMatrix, evaluate, evaluate_deriv, coefficients, function_class, coeff, nterms
+export paraeye, ⊗
+# classes
+export Fourier, Laurent, Analytic, Polynomial, ProductClass
+# para-structure
+export para, paraconj, isparahermitian, isparaunitary, ispositive
+# solver — factorizations dispatch on the STANDARD verbs (eigen/svd/qr/lq/lu/
+# eigvals/svdvals/pinv) for ParaMatrix; these are the returned objects + polar.
+export ParaEigen, ParaSVD, ParaQR, ParaLQ, ParaLU, ParaPolar, polar, numerical_rank
+# solver — spectral / equations
+export para_gram, spectral_factor, leading_eigen, lyapd, cocycle_exponent, para_solve
+# utils
+export on_circle, rank_profile, optimize!
 
 end # module ParaLinearAlgebra

@@ -1,0 +1,257 @@
+# solver/factorizations.jl — QR / LQ / SVD / LU / eigen of a parameterized matrix.
+#
+# These OVERLOAD the standard `LinearAlgebra` verbs on `ParaMatrix`, so the same
+# function names dispatch naturally:  `eigen(A)`, `svd(A)`, `qr(A)`, `lu(A)`,
+# `eigvals(A)`, `svdvals(A)`, `pinv(A)`  all work when `A::ParaMatrix`.
+#
+# SCIENTIFIC NOTE. The QR/SVD/LU/eigendecomposition of A(θ) are algebraic/analytic
+# FUNCTIONS of θ — generally NOT members of any finite class — so they are not
+# exact `ParaMatrix` factors (unlike `det`, `inv` for para-unitary, `para`, and
+# `spectral_factor`, which ARE in-class). Each returns a Para-factorization object
+# that is (i) **callable**, `F(θ)` = the standard factorization of `A(θ)`, and
+# (ii) **sampled** on a circle grid `F.ts` with the factor sequences exposed under
+# the usual property names (`F.values`, `F.U`, `F.Q`, …). Because the sampled
+# factor at `ts[i]` is *by construction* `F(ts[i])`, the identity
+#     decompose-then-evaluate   ==   evaluate-then-decompose
+# i.e. `eigen(A)(θ) == eigen(A(θ))`, holds exactly.
+
+# real, non-negative diagonal phase gauge (continuity / canonical convention)
+function _posphase!(Q, R)
+    @inbounds for i in 1:min(size(R)...)
+        Rii = R[i, i]
+        ph = iszero(Rii) ? one(eltype(R)) : Rii / abs(Rii)
+        @views Q[:, i] .*= ph
+        @views R[i, :] .*= conj(ph)
+    end
+    return Q, R
+end
+
+# ---------- eigen ----------------------------------------------------------
+struct ParaEigen{PM<:ParaMatrix,F}
+    parent::PM
+    ts::Vector{Float64}
+    facts::Vector{F}
+end
+
+"""
+    eigen(A::ParaMatrix; nsample=128) -> ParaEigen
+
+Eigendecomposition of `A(θ)` sampled on the circle. `F::ParaEigen` is callable
+(`F(θ) == eigen(A(θ))`) and exposes `F.values`, `F.vectors` (sequences over `F.ts`).
+"""
+function LinearAlgebra.eigen(A::ParaMatrix; nsample::Int=128)
+    ts = collect(_circle(nsample))
+    return ParaEigen(A, ts, [eigen(Matrix(A(t))) for t in ts])
+end
+(F::ParaEigen)(θ) = eigen(Matrix(getfield(F, :parent)(θ)))
+function Base.getproperty(F::ParaEigen, s::Symbol)
+    s === :values && return [f.values for f in getfield(F, :facts)]
+    s === :vectors && return [f.vectors for f in getfield(F, :facts)]
+    return getfield(F, s)
+end
+Base.propertynames(::ParaEigen) = (:parent, :ts, :facts, :values, :vectors)
+Base.iterate(F::ParaEigen, st::Int=1) =
+    st == 1 ? (F.values, 2) : st == 2 ? (F.vectors, 3) : nothing
+Base.length(::ParaEigen) = 2
+
+"""
+    eigvals(A::ParaMatrix; nsample=128) -> Vector
+
+The eigenvalue functions sampled on the circle (`out[i] == eigvals(A(ts[i]))`).
+"""
+function LinearAlgebra.eigvals(A::ParaMatrix; nsample::Int=128)
+    return [eigvals(Matrix(A(t))) for t in _circle(nsample)]
+end
+
+# ---------- svd ------------------------------------------------------------
+struct ParaSVD{PM<:ParaMatrix,F}
+    parent::PM
+    ts::Vector{Float64}
+    facts::Vector{F}
+end
+
+"""
+    svd(A::ParaMatrix; nsample=128) -> ParaSVD
+
+SVD of `A(θ)` sampled on the circle. Callable (`F(θ) == svd(A(θ))`); exposes
+`F.U`, `F.S`, `F.V`. Reconstruction: `F.U[i]*Diagonal(F.S[i])*F.V[i]' ≈ A(F.ts[i])`.
+"""
+function LinearAlgebra.svd(A::ParaMatrix; nsample::Int=128)
+    ts = collect(_circle(nsample))
+    return ParaSVD(A, ts, [svd(Matrix(A(t))) for t in ts])
+end
+(F::ParaSVD)(θ) = svd(Matrix(getfield(F, :parent)(θ)))
+function Base.getproperty(F::ParaSVD, s::Symbol)
+    s === :U && return [f.U for f in getfield(F, :facts)]
+    s === :S && return [f.S for f in getfield(F, :facts)]
+    s === :V && return [f.V for f in getfield(F, :facts)]
+    s === :Vt && return [f.Vt for f in getfield(F, :facts)]
+    return getfield(F, s)
+end
+Base.propertynames(::ParaSVD) = (:parent, :ts, :facts, :U, :S, :V, :Vt)
+Base.iterate(F::ParaSVD, st::Int=1) =
+    st == 1 ? (F.U, 2) : st == 2 ? (F.S, 3) : st == 3 ? (F.V, 4) : nothing
+Base.length(::ParaSVD) = 3
+
+"""
+    svdvals(A::ParaMatrix; nsample=128) -> Vector
+
+The singular-value functions sampled on the circle (`out[i] == svdvals(A(ts[i]))`).
+"""
+function LinearAlgebra.svdvals(A::ParaMatrix; nsample::Int=128)
+    return [svdvals(Matrix(A(t))) for t in _circle(nsample)]
+end
+
+# ---------- qr / lq (canonical continuity gauge) ---------------------------
+function _qr_gauged(M::AbstractMatrix)
+    F = qr(M)
+    k = min(size(M)...)
+    Q = Matrix(F.Q)[:, 1:k]
+    R = Matrix(F.R)[1:k, :]
+    _posphase!(Q, R)
+    return (; Q, R)
+end
+
+struct ParaQR{PM<:ParaMatrix,F}
+    parent::PM
+    ts::Vector{Float64}
+    facts::Vector{F}
+end
+
+"""
+    qr(A::ParaMatrix; nsample=128) -> ParaQR
+
+QR of `A(θ)` sampled on the circle with the **canonical continuity gauge**
+(real, non-negative diagonal of `R`). Callable; exposes `F.Q` (isometries,
+`F.Q[i]'F.Q[i] ≈ I`) and `F.R`, with `F.Q[i]*F.R[i] ≈ A(F.ts[i])`.
+"""
+function LinearAlgebra.qr(A::ParaMatrix; nsample::Int=128)
+    ts = collect(_circle(nsample))
+    return ParaQR(A, ts, [_qr_gauged(Matrix(A(t))) for t in ts])
+end
+(F::ParaQR)(θ) = _qr_gauged(Matrix(getfield(F, :parent)(θ)))
+function Base.getproperty(F::ParaQR, s::Symbol)
+    s === :Q && return [f.Q for f in getfield(F, :facts)]
+    s === :R && return [f.R for f in getfield(F, :facts)]
+    return getfield(F, s)
+end
+Base.propertynames(::ParaQR) = (:parent, :ts, :facts, :Q, :R)
+Base.iterate(F::ParaQR, st::Int=1) = st == 1 ? (F.Q, 2) : st == 2 ? (F.R, 3) : nothing
+Base.length(::ParaQR) = 2
+
+function _lq_gauged(M::AbstractMatrix)
+    F = lq(M)
+    L = Matrix(F.L)
+    Q = Matrix(F.Q)
+    @inbounds for i in 1:min(size(L)...)
+        Lii = L[i, i]
+        ph = iszero(Lii) ? one(eltype(L)) : Lii / abs(Lii)
+        @views L[:, i] .*= conj(ph)
+        @views Q[i, :] .*= ph
+    end
+    return (; L, Q)
+end
+
+struct ParaLQ{PM<:ParaMatrix,F}
+    parent::PM
+    ts::Vector{Float64}
+    facts::Vector{F}
+end
+
+"""
+    lq(A::ParaMatrix; nsample=128) -> ParaLQ
+
+LQ of `A(θ)` sampled on the circle (canonical gauge; `F.Q[i]` isometric,
+`F.L[i]*F.Q[i] ≈ A(F.ts[i])`).
+"""
+function LinearAlgebra.lq(A::ParaMatrix; nsample::Int=128)
+    ts = collect(_circle(nsample))
+    return ParaLQ(A, ts, [_lq_gauged(Matrix(A(t))) for t in ts])
+end
+(F::ParaLQ)(θ) = _lq_gauged(Matrix(getfield(F, :parent)(θ)))
+function Base.getproperty(F::ParaLQ, s::Symbol)
+    s === :L && return [f.L for f in getfield(F, :facts)]
+    s === :Q && return [f.Q for f in getfield(F, :facts)]
+    return getfield(F, s)
+end
+Base.propertynames(::ParaLQ) = (:parent, :ts, :facts, :L, :Q)
+Base.iterate(F::ParaLQ, st::Int=1) = st == 1 ? (F.L, 2) : st == 2 ? (F.Q, 3) : nothing
+Base.length(::ParaLQ) = 2
+
+# ---------- lu -------------------------------------------------------------
+struct ParaLU{PM<:ParaMatrix,F}
+    parent::PM
+    ts::Vector{Float64}
+    facts::Vector{F}
+end
+
+"""
+    lu(A::ParaMatrix; nsample=128) -> ParaLU
+
+LU (partial pivoting) of `A(θ)` sampled on the circle. Callable; exposes
+`F.L`, `F.U`, `F.p`, with `F.L[i]*F.U[i] ≈ A(F.ts[i])[F.p[i], :]`.
+"""
+function LinearAlgebra.lu(A::ParaMatrix; nsample::Int=128, check::Bool=true)
+    ts = collect(_circle(nsample))
+    return ParaLU(A, ts, [lu(Matrix(A(t)); check=check) for t in ts])
+end
+(F::ParaLU)(θ) = lu(Matrix(getfield(F, :parent)(θ)))
+function Base.getproperty(F::ParaLU, s::Symbol)
+    s === :L && return [f.L for f in getfield(F, :facts)]
+    s === :U && return [f.U for f in getfield(F, :facts)]
+    s === :p && return [f.p for f in getfield(F, :facts)]
+    return getfield(F, s)
+end
+Base.propertynames(::ParaLU) = (:parent, :ts, :facts, :L, :U, :p)
+Base.iterate(F::ParaLU, st::Int=1) =
+    st == 1 ? (F.L, 2) : st == 2 ? (F.U, 3) : st == 3 ? (F.p, 4) : nothing
+Base.length(::ParaLU) = 3
+
+# ---------- polar (no stdlib verb; new export) -----------------------------
+struct ParaPolar{PM<:ParaMatrix,F}
+    parent::PM
+    ts::Vector{Float64}
+    facts::Vector{F}
+end
+
+function _polar(M::AbstractMatrix)
+    F = svd(M)
+    return (; U=F.U * F.Vt, P=F.V * Diagonal(F.S) * F.Vt)
+end
+
+"""
+    polar(A::ParaMatrix; nsample=128) -> ParaPolar
+
+Polar factors `A(θ) = U(θ)P(θ)` sampled on the circle: `F.U[i]` is the
+(para-)unitary gauge (`F.U[i]'F.U[i] ≈ I` — the canonical isometry) and `F.P[i] ⪰ 0`.
+"""
+function polar(A::ParaMatrix; nsample::Int=128)
+    ts = collect(_circle(nsample))
+    return ParaPolar(A, ts, [_polar(Matrix(A(t))) for t in ts])
+end
+(F::ParaPolar)(θ) = _polar(Matrix(getfield(F, :parent)(θ)))
+function Base.getproperty(F::ParaPolar, s::Symbol)
+    s === :U && return [f.U for f in getfield(F, :facts)]
+    s === :P && return [f.P for f in getfield(F, :facts)]
+    return getfield(F, s)
+end
+Base.propertynames(::ParaPolar) = (:parent, :ts, :facts, :U, :P)
+Base.iterate(F::ParaPolar, st::Int=1) = st == 1 ? (F.U, 2) : st == 2 ? (F.P, 3) : nothing
+Base.length(::ParaPolar) = 2
+
+# ---------- regularized pseudo-inverse (SVD divergence removal) -------------
+"""
+    pinv(A::ParaMatrix; atol=0, rtol=…, nsample=128) -> (ts, Aplus)
+
+Regularized Moore–Penrose pseudo-inverse of `A(θ)` sampled on the circle, via the
+truncated SVD (singular values ≤ `max(atol, rtol·σ₁)` are dropped). This is the
+**SVD divergence removal**: near-zero singular directions are projected out rather
+than inverted, so `Aplus[i]` stays bounded even where `A(ts[i])` is (near-)singular.
+"""
+function LinearAlgebra.pinv(
+    A::ParaMatrix{T}; atol::Real=0, rtol::Real=0, nsample::Int=128
+) where {T}
+    rt = rtol > 0 ? rtol : (atol > 0 ? 0.0 : eps(real(float(one(T)))) * minimum(size(A)))
+    ts = collect(_circle(nsample))
+    return ts, [pinv(Matrix(A(t)); atol=atol, rtol=rt) for t in ts]
+end
