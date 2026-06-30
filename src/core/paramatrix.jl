@@ -102,6 +102,7 @@ end
 Base.:-(A::ParaMatrix) = ParaMatrix([-c for c in A.coeffs], A.class)
 Base.:*(α::Number, A::ParaMatrix) = ParaMatrix([α * c for c in A.coeffs], A.class)
 Base.:*(A::ParaMatrix, α::Number) = α * A
+Base.:/(A::ParaMatrix, α::Number) = ParaMatrix([c / α for c in A.coeffs], A.class)
 
 Base.:(==)(A::ParaMatrix, B::ParaMatrix) = A.class == B.class && A.coeffs == B.coeffs
 function Base.isapprox(A::ParaMatrix, B::ParaMatrix; kw...)
@@ -154,6 +155,29 @@ Infix Kronecker product `A ⊗ B = kron(A, B)` (coefficient-convolution kron of 
 ParaMatrices).
 """
 ⊗(A, B) = kron(A, B)
+
+"""
+    directsum(A, B) -> ParaMatrix
+    A ⊕ B
+
+Direct sum (block diagonal): `(A ⊕ B)(θ) = [A(θ) 0; 0 B(θ)]`. Purely structural —
+defined for any (matching) class, no ring structure needed — and it composes the
+spectra and determinants of the parts (`eig(A⊕B) = eig(A) ∪ eig(B)`,
+`det(A⊕B) = det(A)·det(B)`). The companion of the Kronecker product `⊗`.
+"""
+function directsum(A::ParaMatrix, B::ParaMatrix)
+    _sameclass(A, B)
+    return ParaMatrix(
+        [cat(a, b; dims=(1, 2)) for (a, b) in zip(A.coeffs, B.coeffs)], A.class
+    )
+end
+
+"""
+    ⊕(A, B)
+
+Infix direct sum `A ⊕ B = directsum(A, B)` (block-diagonal stack).
+"""
+⊕(A, B) = directsum(A, B)
 
 function Base.:^(A::ParaMatrix, n::Integer)
     _assert_ring(A)

@@ -132,6 +132,17 @@ function ispositive(A::ParaMatrix{T,S,<:Laurent}; nsample=64, tol=-1e-9) where {
     )
 end
 
+"""
+    opnorm(A; nsample=256) -> Real
+
+The H∞ / sup operator norm `max_θ ‖A(θ)‖₂` over the circle (the largest singular
+value of `A(θ)` maximised on an `nsample` grid) — the gain of `A` as a
+multiplication operator. Equals `1` for a para-unitary `A`.
+"""
+function LinearAlgebra.opnorm(A::ParaMatrix{T,S,<:Laurent}; nsample::Int=256) where {T,S}
+    return maximum(opnorm(Matrix(A(t))) for t in range(0, 1; length=nsample + 1)[1:nsample])
+end
+
 function LinearAlgebra.ishermitian(A::ParaMatrix{T,S,<:Laurent}; kw...) where {T,S}
     return isparahermitian(A; kw...)
 end
