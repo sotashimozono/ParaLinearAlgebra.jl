@@ -14,6 +14,7 @@ end
         for θ in RNG_PTS
             @test para(A)(θ) ≈ A(θ)' atol = 1e-10
             @test A'(θ) ≈ A(θ)' atol = 1e-10            # adjoint dispatches to para
+            @test paraconj(A)(θ) ≈ para(A)(θ)           # alias
         end
         @test para(para(A)) ≈ A                         # involution
     end

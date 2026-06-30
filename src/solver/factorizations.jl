@@ -30,7 +30,7 @@ end
 """
     ParaEigen
 
-Sampled eigendecomposition of a `ParaMatrix` returned by [`eigen`](@ref); callable
+Sampled eigendecomposition of a `ParaMatrix` returned by `eigen`; callable
 (`F(θ)`) and exposing `F.values`, `F.vectors`, `F.ts`.
 """
 struct ParaEigen{PM<:ParaMatrix,F}
@@ -98,7 +98,7 @@ end
 """
     ParaSVD
 
-Sampled SVD of a `ParaMatrix` returned by [`svd`](@ref); callable (`F(θ)`) and
+Sampled SVD of a `ParaMatrix` returned by `svd`; callable (`F(θ)`) and
 exposing `F.U`, `F.S`, `F.V`, `F.ts`.
 """
 struct ParaSVD{PM<:ParaMatrix,F}
@@ -112,7 +112,7 @@ end
 
 SVD of `A(θ)` sampled on the circle. Callable (`F(θ) == svd(A(θ))`); exposes
 `F.U`, `F.S`, `F.V` as **sequences over `F.ts`** (not single matrices — see
-[`eigen`](@ref)'s note). Reconstruction: `F.U[i]*Diagonal(F.S[i])*F.V[i]' ≈ A(F.ts[i])`.
+`eigen`'s note). Reconstruction: `F.U[i]*Diagonal(F.S[i])*F.V[i]' ≈ A(F.ts[i])`.
 """
 function LinearAlgebra.svd(A::ParaMatrix; nsample::Int=128)
     ts = collect(_circle(nsample))
@@ -163,7 +163,7 @@ end
 """
     ParaQR
 
-Sampled QR (canonical continuity gauge) of a `ParaMatrix` returned by [`qr`](@ref);
+Sampled QR (canonical continuity gauge) of a `ParaMatrix` returned by `qr`;
 callable (`F(θ)`) and exposing `F.Q`, `F.R`, `F.ts`.
 """
 struct ParaQR{PM<:ParaMatrix,F}
@@ -216,7 +216,7 @@ end
 """
     ParaLQ
 
-Sampled LQ (canonical continuity gauge) of a `ParaMatrix` returned by [`lq`](@ref);
+Sampled LQ (canonical continuity gauge) of a `ParaMatrix` returned by `lq`;
 callable (`F(θ)`) and exposing `F.L`, `F.Q`, `F.ts`.
 """
 struct ParaLQ{PM<:ParaMatrix,F}
@@ -256,7 +256,7 @@ Base.length(::ParaLQ) = 2
 """
     ParaLU
 
-Sampled LU (partial pivoting) of a `ParaMatrix` returned by [`lu`](@ref); callable
+Sampled LU (partial pivoting) of a `ParaMatrix` returned by `lu`; callable
 (`F(θ)`) and exposing `F.L`, `F.U`, `F.p`, `F.ts`.
 """
 struct ParaLU{PM<:ParaMatrix,F}

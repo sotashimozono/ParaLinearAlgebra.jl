@@ -74,7 +74,7 @@ end
 The `nbasis × nbasis` Gram matrix `M_{kl} = ∫ conj(wₖ(θ)) wₗ(θ) dθ` of the basis
 over one period (uniform measure) — the metric that turns coefficient inner
 products into the `L²` function inner product, `⟨A,B⟩_{L²} = Σ_{kl} M_{kl} ⟨Aₖ,Bₗ⟩_F`.
-Used by [`dot`](@ref) and [`norm`](@ref); `M = I` for an L²-orthonormal basis
+Used by `dot` and `norm`; `M = I` for an L²-orthonormal basis
 ([`Laurent`](@ref)).
 """
 function basis_gram end

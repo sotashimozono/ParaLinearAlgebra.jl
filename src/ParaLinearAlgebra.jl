@@ -17,7 +17,7 @@ function type:
 - `solver/`  — factorizations (`eigen`/`svd`/`qr`/`lq`/`lu`/`pinv` dispatch on
                `ParaMatrix`) plus circle/`Laurent`-parametric algorithms
                ([`spectral_factor`](@ref), [`para_gram`](@ref),
-               [`leading_eigen`](@ref), [`lyapd`](@ref),
+               [`leading_eigen`](@ref), `lyapd`,
                [`cocycle_exponent`](@ref), [`para_solve`](@ref) — these require a
                `Laurent` class).
 - `utils/`   — [`on_circle`](@ref), `rank`/[`rank_profile`](@ref), [`optimize!`](@ref).
