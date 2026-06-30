@@ -46,3 +46,21 @@ end
     end
     @test_throws ErrorException inv(randpm(2, Laurent(-1, 1); seed=3))  # not para-unitary
 end
+
+@testset "parahermitianpart + para-Hermitian closure" begin
+    for d in (1, 2, 3), seed in SEEDS
+        A = randpm(d, Laurent(-2, 2); seed=seed)            # symmetric window
+        H = parahermitianpart(A)
+        @test isparahermitian(H)                            # projector lands in the set
+        for θ in RNG_PTS
+            @test H(θ) ≈ (A(θ) + A(θ)') / 2 atol = 1e-10    # = pointwise Hermitian part
+        end
+        # closure: para-Hermitian is closed under + and real scaling
+        H2 = parahermitianpart(randpm(d, Laurent(-2, 2); seed=seed + 31))
+        @test isparahermitian(H + H2)
+        @test isparahermitian(3.0 * H)
+        @test isparahermitian(para(A) * A)                  # the Gram is para-Hermitian
+    end
+    # needs a symmetric window
+    @test_throws ArgumentError parahermitianpart(randpm(2, Analytic(2); seed=1))
+end

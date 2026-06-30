@@ -37,6 +37,7 @@ struct ParaEigen{PM<:ParaMatrix,F}
     parent::PM
     ts::Vector{Float64}
     facts::Vector{F}
+    herm::Bool
 end
 
 """
@@ -51,17 +52,24 @@ Eigendecomposition of `A(θ)` sampled on the circle. `F::ParaEigen` is callable
     Destructuring `vals, vecs = eigen(A)` therefore yields `Vector{Vector}` /
     `Vector{Matrix}`. For a single point use `eigen(A(θ))`.
 """
-function LinearAlgebra.eigen(A::ParaMatrix; nsample::Int=128)
+# `ishermitian=true` wraps each A(θ) in `Hermitian` so the spectrum is guaranteed
+# real (the Hermitian structure flowing into the spectral routine) — use for a
+# para-Hermitian A (`isparahermitian(A)`); the flag is stored so the callable agrees.
+function LinearAlgebra.eigen(A::ParaMatrix; nsample::Int=128, ishermitian::Bool=false)
     ts = collect(_circle(nsample))
-    return ParaEigen(A, ts, [eigen(Matrix(A(t))) for t in ts])
+    wrap = ishermitian ? Hermitian : identity
+    return ParaEigen(A, ts, [eigen(wrap(Matrix(A(t)))) for t in ts], ishermitian)
 end
-(F::ParaEigen)(θ) = eigen(Matrix(getfield(F, :parent)(θ)))
+function (F::ParaEigen)(θ)
+    M = Matrix(getfield(F, :parent)(θ))
+    return eigen(getfield(F, :herm) ? Hermitian(M) : M)
+end
 function Base.getproperty(F::ParaEigen, s::Symbol)
     s === :values && return [f.values for f in getfield(F, :facts)]
     s === :vectors && return [f.vectors for f in getfield(F, :facts)]
     return getfield(F, s)
 end
-Base.propertynames(::ParaEigen) = (:parent, :ts, :facts, :values, :vectors)
+Base.propertynames(::ParaEigen) = (:parent, :ts, :facts, :herm, :values, :vectors)
 function Base.iterate(F::ParaEigen, st::Int=1)
     if st == 1
         (F.values, 2)
@@ -77,10 +85,13 @@ Base.length(::ParaEigen) = 2
     eigvals(A::ParaMatrix; nsample=128) -> Vector
 
 The eigenvalue functions sampled on the circle: `out[i] == eigvals(A(θᵢ))` for
-`θᵢ` uniform on `[0,1)` (a `Vector` of per-θ eigenvalue vectors).
+`θᵢ` uniform on `[0,1)` (a `Vector` of per-θ eigenvalue vectors). With
+`ishermitian=true` each `A(θ)` is wrapped in `Hermitian` ⇒ the bands are real
+(use for a para-Hermitian `A`).
 """
-function LinearAlgebra.eigvals(A::ParaMatrix; nsample::Int=128)
-    return [eigvals(Matrix(A(t))) for t in _circle(nsample)]
+function LinearAlgebra.eigvals(A::ParaMatrix; nsample::Int=128, ishermitian::Bool=false)
+    wrap = ishermitian ? Hermitian : identity
+    return [eigvals(wrap(Matrix(A(t)))) for t in _circle(nsample)]
 end
 
 # ---------- svd ------------------------------------------------------------

@@ -134,3 +134,22 @@ end
         @warn "Eigenvalue near-crossing (min gap < 1e-3): eigenvectors ill-conditioned." mingap
     @test mingap ≥ 0
 end
+
+@testset "Hermitian-aware spectrum: eigen/eigvals(; ishermitian=true)" begin
+    for d in (1, 2, 3), seed in SEEDS
+        M = randpm(d, Analytic(1); seed=seed)
+        H = para(M) * M + paraeye(d, ComplexF64, Laurent(-1, 1))   # para-Hermitian PD
+        @test isparahermitian(H)
+        ev = eigvals(H; nsample=8, ishermitian=true)
+        @test eltype(ev[1]) <: Real                                # guaranteed-real bands
+        Fe = eigen(H; nsample=8, ishermitian=true)
+        for (i, t) in enumerate(Fe.ts)
+            Ht = Matrix(H(t))
+            @test ev[i] ≈ eigvals(Hermitian(Ht))
+            @test eltype(Fe.values[i]) <: Real
+            V, λ = Fe.vectors[i], Fe.values[i]
+            @test V * Diagonal(λ) * V' ≈ Ht atol = 1e-9            # Hermitian reconstruction
+        end
+        @test Fe(0.3).values ≈ eigvals(Hermitian(Matrix(H(0.3)))) # callable agrees (flag stored)
+    end
+end
