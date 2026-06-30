@@ -98,10 +98,10 @@ function ispositive(A::ParaMatrix{T,S,<:Laurent}; nsample=64, tol=-1e-9) where {
 end
 
 function LinearAlgebra.ishermitian(A::ParaMatrix{T,S,<:Laurent}; kw...) where {T,S}
-    isparahermitian(A; kw...)
+    return isparahermitian(A; kw...)
 end
 function LinearAlgebra.isposdef(A::ParaMatrix{T,S,<:Laurent}; kw...) where {T,S}
-    ispositive(A; kw...)
+    return ispositive(A; kw...)
 end
 
 # det(A(z)) — a scalar Laurent polynomial — via evaluate on the circle + inverse DFT

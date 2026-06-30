@@ -83,10 +83,10 @@ The parameter derivative `∂_p A(p) = Σ_k basis_deriv(class, p)_k · coeffs_k`
 ([`ProductClass`](@ref)) object, the partial derivative along axis `dim`.
 """
 function evaluate_deriv(A::ParaMatrix, p)
-    sum(w * c for (w, c) in zip(basis_deriv(A.class, p), A.coeffs))
+    return sum(w * c for (w, c) in zip(basis_deriv(A.class, p), A.coeffs))
 end
 function evaluate_deriv(A::ParaMatrix, ps, dim::Integer)
-    sum(w * c for (w, c) in zip(basis_deriv(A.class, ps, dim), A.coeffs))
+    return sum(w * c for (w, c) in zip(basis_deriv(A.class, ps, dim), A.coeffs))
 end
 
 # ---- class-agnostic ring + structural operations --------------------------
@@ -94,10 +94,10 @@ end
 _sameclass(A, B) = A.class == B.class || error("class mismatch: $(A.class) vs $(B.class)")
 
 function Base.:+(A::ParaMatrix, B::ParaMatrix)
-    (_sameclass(A, B); ParaMatrix(A.coeffs .+ B.coeffs, A.class))
+    return (_sameclass(A, B); ParaMatrix(A.coeffs .+ B.coeffs, A.class))
 end
 function Base.:-(A::ParaMatrix, B::ParaMatrix)
-    (_sameclass(A, B); ParaMatrix(A.coeffs .- B.coeffs, A.class))
+    return (_sameclass(A, B); ParaMatrix(A.coeffs .- B.coeffs, A.class))
 end
 Base.:-(A::ParaMatrix) = ParaMatrix([-c for c in A.coeffs], A.class)
 Base.:*(α::Number, A::ParaMatrix) = ParaMatrix([α * c for c in A.coeffs], A.class)
@@ -105,7 +105,8 @@ Base.:*(A::ParaMatrix, α::Number) = α * A
 
 Base.:(==)(A::ParaMatrix, B::ParaMatrix) = A.class == B.class && A.coeffs == B.coeffs
 function Base.isapprox(A::ParaMatrix, B::ParaMatrix; kw...)
-    A.class == B.class && all(isapprox(a, b; kw...) for (a, b) in zip(A.coeffs, B.coeffs))
+    return A.class == B.class &&
+           all(isapprox(a, b; kw...) for (a, b) in zip(A.coeffs, B.coeffs))
 end
 Base.zero(A::ParaMatrix) = ParaMatrix([zero(c) for c in A.coeffs], A.class)
 Base.copy(A::ParaMatrix) = ParaMatrix([copy(c) for c in A.coeffs], A.class)
@@ -117,7 +118,7 @@ function _convolve(op, A::ParaMatrix, B::ParaMatrix)
     cls = _prodclass(A.class, B.class)
     pA, pB, pC = powers(A.class), powers(B.class), powers(cls)
     out = map(pC) do kc
-        sum(
+        return sum(
             op(A.coeffs[ia], B.coeffs[ib]) for ia in eachindex(pA) for
             ib in eachindex(pB) if pA[ia] + pB[ib] == kc
         )
@@ -129,7 +130,7 @@ end
 # A single method + runtime guard avoids the dispatch ambiguity a `<:RingClass`
 # overload would create against the unconstrained signature.
 function _notring(A)
-    error(
+    return error(
         "ring operation needs a RingClass (Laurent/Polynomial/ProductClass); got " *
         "$(typeof(function_class(A))) — an ansatz class. Evaluate first (`A(p)`) and use LinearAlgebra.",
     )
@@ -180,10 +181,10 @@ end
 
 # indexing: entry → 1×1 ParaMatrix ; block → sub ParaMatrix (same class)
 function Base.getindex(A::ParaMatrix, i::Int, j::Int)
-    ParaMatrix([fill(c[i, j], 1, 1) for c in A.coeffs], A.class)
+    return ParaMatrix([fill(c[i, j], 1, 1) for c in A.coeffs], A.class)
 end
 function Base.getindex(A::ParaMatrix, I::AbstractVector, J::AbstractVector)
-    ParaMatrix([c[I, J] for c in A.coeffs], A.class)
+    return ParaMatrix([c[I, J] for c in A.coeffs], A.class)
 end
 
 function Base.hcat(As::ParaMatrix...)

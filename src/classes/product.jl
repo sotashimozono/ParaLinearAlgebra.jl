@@ -15,7 +15,7 @@ end
 ProductClass(cs::FunctionClass...) = ProductClass(cs)
 
 function powers(pc::ProductClass)
-    vec([CartesianIndex(t) for t in Iterators.product(map(powers, pc.classes)...)])
+    return vec([CartesianIndex(t) for t in Iterators.product(map(powers, pc.classes)...)])
 end
 nbasis(pc::ProductClass) = prod(map(nbasis, pc.classes))
 
@@ -41,7 +41,7 @@ function basis_deriv(pc::ProductClass, ps, dim::Integer)
     ])
 end
 function basis_deriv(pc::ProductClass, ps)
-    throw(
+    return throw(
         ArgumentError(
             "ProductClass derivative is per-axis: call basis_deriv(class, ps, dim) or " *
             "evaluate_deriv(A, ps, dim), not the scalar 2-arg form",
@@ -65,7 +65,7 @@ function basis_gram(pc::ProductClass)
 end
 
 function _prodclass(a::ProductClass, b::ProductClass)
-    ProductClass(map(_prodclass, a.classes, b.classes))
+    return ProductClass(map(_prodclass, a.classes, b.classes))
 end
 
 # multi-parameter para-adjoint: negate every axis index, adjoint each block (all-Laurent)

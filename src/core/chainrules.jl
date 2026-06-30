@@ -10,9 +10,7 @@ function ChainRulesCore.rrule(::typeof(evaluate), A::ParaMatrix, p)
     function evaluate_pullback(ȳ)
         Ȳ = unthunk(ȳ)
         c̄ = [conj(w[i]) * Ȳ for i in eachindex(w)]
-        return (
-            NoTangent(), Tangent{typeof(A)}(; coeffs=c̄, class=NoTangent()), NoTangent()
-        )
+        return (NoTangent(), Tangent{typeof(A)}(; coeffs=c̄, class=NoTangent()), NoTangent())
     end
     return y, evaluate_pullback
 end
