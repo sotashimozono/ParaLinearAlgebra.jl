@@ -18,12 +18,14 @@ end
 _ctc(x) = unthunk(x).coeffs   # output cotangent → coefficient vector
 
 function ChainRulesCore.rrule(::typeof(+), A::ParaMatrix, B::ParaMatrix)
+    # give A and B INDEPENDENT cotangent buffers: a mutation-based AD backend
+    # (e.g. Mooncake) accumulating in place must not alias one into the other.
     plus_back(Ȳ) = (
         c̄ = _ctc(Ȳ);
         (
             NoTangent(),
             Tangent{typeof(A)}(; coeffs=c̄, class=NoTangent()),
-            Tangent{typeof(B)}(; coeffs=c̄, class=NoTangent()),
+            Tangent{typeof(B)}(; coeffs=[copy(c) for c in c̄], class=NoTangent()),
         )
     )
     return A + B, plus_back

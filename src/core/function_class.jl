@@ -17,10 +17,28 @@
 
 Abstract supertype for the parameter-dependence of a parameterized object.
 Concrete classes implement [`basis`](@ref) and [`nbasis`](@ref); optionally
-[`basis_deriv`](@ref) and [`powers`](@ref). The core is generic over this
-interface — individual classes are defined separately in `classes/`.
+[`basis_deriv`](@ref), [`basis_gram`](@ref), and [`powers`](@ref). The core is
+generic over this interface — individual classes are defined separately in
+`classes/`.
+
+Two kinds of class:
+- **ansatz** classes (e.g. [`Fourier`](@ref)) — support construction,
+  `evaluate`, `∂_p`, and AD, but NOT the multiplication ring.
+- **ring** classes ([`RingClass`](@ref): [`Laurent`](@ref)/[`Analytic`](@ref),
+  [`Polynomial`](@ref), [`ProductClass`](@ref)) — additionally form a ring under
+  `*`/`kron`/`^` and provide [`powers`](@ref)/`coeff`/`one`.
 """
 abstract type FunctionClass end
+
+"""
+    RingClass <: FunctionClass
+
+Classes whose ParaMatrices form a multiplication ring: products of factors are
+again ParaMatrices of a (combined) class. Ring classes define [`powers`](@ref)
+and a [`_prodclass`](@ref) rule, which enable `*`, `kron`, `^`, `coeff`, `one`,
+and `paraeye`. Non-ring (ansatz) classes deliberately lack these.
+"""
+abstract type RingClass <: FunctionClass end
 
 """
     basis(c::FunctionClass, p) -> AbstractVector
@@ -31,12 +49,30 @@ function basis end
 
 """
     basis_deriv(c::FunctionClass, p) -> AbstractVector
+    basis_deriv(c::FunctionClass, p, dim::Integer) -> AbstractVector
 
 The parameter derivative `dw/dp` of the weights — the primitive behind
 parameter-derivatives of any object built on `c` (Berry/quantum-geometry).
-Optional; defined by classes that are differentiable in `p`.
+Optional; defined by classes that are differentiable in `p`. For a
+multi-parameter class ([`ProductClass`](@ref)) the partial derivative along axis
+`dim` is `basis_deriv(c, ps, dim)`; the scalar form is undefined there.
 """
 function basis_deriv end
+
+# single-parameter classes: only dim 1 exists
+basis_deriv(c::FunctionClass, p, dim::Integer) =
+    dim == 1 ? basis_deriv(c, p) :
+    throw(ArgumentError("$(typeof(c)) has one parameter; dim must be 1, got $dim"))
+
+"""
+    basis_gram(c::FunctionClass) -> AbstractMatrix
+
+The `nbasis × nbasis` Gram matrix `M_{kl} = ∫ wₖ(θ) conj(wₗ(θ)) dθ` of the basis
+over one period — the metric that turns coefficient inner products into the
+`L²` function inner product, `⟨A,B⟩_{L²} = Σ_{kl} M_{kl} ⟨Aₖ,Bₗ⟩_F`. Used by
+[`norm`](@ref); `M = I` exactly for an L²-orthonormal basis ([`Laurent`](@ref)).
+"""
+function basis_gram end
 
 """
     powers(c::FunctionClass)

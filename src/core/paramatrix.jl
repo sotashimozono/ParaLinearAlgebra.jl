@@ -21,6 +21,10 @@ struct ParaMatrix{T,S<:AbstractMatrix{T},C<:FunctionClass}
     ) where {T,S<:AbstractMatrix{T},C<:FunctionClass}
         length(coeffs) == nbasis(class) ||
             error("coeff count $(length(coeffs)) ≠ basis size $(nbasis(class)) for $class")
+        isempty(coeffs) && error("ParaMatrix needs at least one coefficient block")
+        sz = size(first(coeffs))
+        all(c -> size(c) == sz, coeffs) ||
+            error("coefficient blocks must share one size; got $(unique(size.(coeffs)))")
         return new{T,S,C}(coeffs, class)
     end
 end
@@ -51,9 +55,13 @@ nterms(A::ParaMatrix) = length(A.coeffs)
 """
     coeff(A::ParaMatrix, k::Int) -> AbstractMatrix
 
-The coefficient block at integer power `k` (ring/power-window classes only).
+The coefficient block at integer power `k` (ring classes only).
 """
-coeff(A::ParaMatrix, k::Int) = A.coeffs[k - first(powers(A.class)) + 1]
+function coeff(A::ParaMatrix, k::Int)
+    function_class(A) isa RingClass ||
+        error("coeff requires a ring class; got $(typeof(function_class(A)))")
+    return A.coeffs[k - first(powers(A.class)) + 1]
+end
 
 # ---- evaluation (the bridge to dense LinearAlgebra) ------------------------
 
@@ -68,12 +76,16 @@ evaluate(A::ParaMatrix, p) = sum(w * c for (w, c) in zip(basis(A.class, p), A.co
 
 """
     evaluate_deriv(A::ParaMatrix, p) -> AbstractMatrix
+    evaluate_deriv(A::ParaMatrix, ps, dim::Integer) -> AbstractMatrix
 
 The parameter derivative `∂_p A(p) = Σ_k basis_deriv(class, p)_k · coeffs_k`
-(requires the class to define [`basis_deriv`](@ref)).
+(requires the class to define [`basis_deriv`](@ref)). For a multi-parameter
+([`ProductClass`](@ref)) object, the partial derivative along axis `dim`.
 """
 evaluate_deriv(A::ParaMatrix, p) =
     sum(w * c for (w, c) in zip(basis_deriv(A.class, p), A.coeffs))
+evaluate_deriv(A::ParaMatrix, ps, dim::Integer) =
+    sum(w * c for (w, c) in zip(basis_deriv(A.class, ps, dim), A.coeffs))
 
 # ---- class-agnostic ring + structural operations --------------------------
 
@@ -106,11 +118,30 @@ function _convolve(op, A::ParaMatrix, B::ParaMatrix)
     end
     return ParaMatrix(out, cls)
 end
-Base.:*(A::ParaMatrix, B::ParaMatrix) = _convolve(*, A, B)
-Base.kron(A::ParaMatrix, B::ParaMatrix) = _convolve(kron, A, B)
+# ring product / kron / power require a RingClass; an ansatz class (e.g. Fourier)
+# gets a clear ErrorException instead of a cryptic MethodError inside `_convolve`.
+# A single method + runtime guard avoids the dispatch ambiguity a `<:RingClass`
+# overload would create against the unconstrained signature.
+_notring(A) = error(
+    "ring operation needs a RingClass (Laurent/Polynomial/ProductClass); got " *
+    "$(typeof(function_class(A))) — an ansatz class. Evaluate first (`A(p)`) and use LinearAlgebra.",
+)
+_assert_ring(A) = function_class(A) isa RingClass || _notring(A)
+
+function Base.:*(A::ParaMatrix, B::ParaMatrix)
+    _assert_ring(A)
+    _assert_ring(B)
+    return _convolve(*, A, B)
+end
+function Base.kron(A::ParaMatrix, B::ParaMatrix)
+    _assert_ring(A)
+    _assert_ring(B)
+    return _convolve(kron, A, B)
+end
 const ⊗ = kron
 
 function Base.:^(A::ParaMatrix, n::Integer)
+    _assert_ring(A)
     n ≥ 0 || error("negative powers are rational (out of the polynomial/Laurent class)")
     n == 0 && return one(A)
     B = A
@@ -118,6 +149,25 @@ function Base.:^(A::ParaMatrix, n::Integer)
         B = B * A
     end
     return B
+end
+
+# identity element, generic over ring classes (the zero power carries `I`).
+"""
+    paraeye(d, T, class::RingClass) -> ParaMatrix
+
+The `d×d` identity ParaMatrix (`I` at the zero power, zeros elsewhere), element type `T`.
+"""
+function paraeye(d::Int, ::Type{T}, class::RingClass) where {T}
+    return ParaMatrix(
+        [k == zero(k) ? Matrix{T}(I, d, d) : zeros(T, d, d) for k in powers(class)], class
+    )
+end
+function Base.one(A::ParaMatrix)
+    _assert_ring(A)
+    size(A, 1) == size(A, 2) || error("one(A) needs a square ParaMatrix")
+    pw = powers(function_class(A))
+    any(k -> k == zero(k), pw) || error("one(A) needs the zero power in the window")
+    return paraeye(size(A, 1), eltype(A), function_class(A))
 end
 
 # indexing: entry → 1×1 ParaMatrix ; block → sub ParaMatrix (same class)
@@ -139,6 +189,20 @@ end
 
 # class-agnostic reductions
 LinearAlgebra.tr(A::ParaMatrix) = ParaMatrix([fill(tr(c), 1, 1) for c in A.coeffs], A.class)
-LinearAlgebra.norm(A::ParaMatrix, p::Real=2) =
-    p == 2 ? sqrt(sum(norm(c)^2 for c in A.coeffs)) :
-    error("only the L² (Parseval) norm is defined for a ParaMatrix")
+
+"""
+    norm(A::ParaMatrix, p=2) -> Real
+
+The `L²` function norm `‖A‖ = sqrt(∫₀¹ ‖A(θ)‖_F² dθ)`, computed exactly from the
+coefficients via the basis Gram (see [`basis_gram`](@ref)):
+`‖A‖² = Σ_{kl} M_{kl} ⟨Aₖ,Aₗ⟩_F`. For an orthonormal basis ([`Laurent`](@ref))
+this is Parseval `sqrt(Σ‖Aₖ‖²)`; for `Fourier`/`Polynomial` the Gram supplies the
+correct cross/weight factors.
+"""
+function LinearAlgebra.norm(A::ParaMatrix, p::Real=2)
+    p == 2 || error("only the L² norm (p=2) is defined for a ParaMatrix")
+    M = basis_gram(A.class)
+    n = nterms(A)
+    s = sum(M[k, l] * dot(A.coeffs[k], A.coeffs[l]) for k in 1:n, l in 1:n)
+    return sqrt(max(real(s), zero(real(s))))
+end

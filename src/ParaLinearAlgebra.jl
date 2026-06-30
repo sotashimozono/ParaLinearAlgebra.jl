@@ -14,9 +14,12 @@ function type:
 - `classes/` — concrete function types as plug-ins: [`Fourier`](@ref) (ansatz),
                [`Laurent`](@ref)/[`Analytic`](@ref) (ring + para-adjoint),
                [`Polynomial`](@ref), [`ProductClass`](@ref).
-- `solver/`  — algorithms on a `ParaMatrix`: [`spectral_factor`](@ref),
-               [`para_gram`](@ref), [`leading_eigen`](@ref), [`lyapd`](@ref),
-               [`cocycle_exponent`](@ref), [`para_solve`](@ref).
+- `solver/`  — factorizations (`eigen`/`svd`/`qr`/`lq`/`lu`/`pinv` dispatch on
+               `ParaMatrix`) plus circle/`Laurent`-parametric algorithms
+               ([`spectral_factor`](@ref), [`para_gram`](@ref),
+               [`leading_eigen`](@ref), [`lyapd`](@ref),
+               [`cocycle_exponent`](@ref), [`para_solve`](@ref) — these require a
+               `Laurent` class).
 - `utils/`   — [`on_circle`](@ref), `rank`/[`rank_profile`](@ref), [`optimize!`](@ref).
 
 UI follows the Julia ecosystem: a `ParaMatrix` is **callable** (`A(p)` → a dense
@@ -51,7 +54,7 @@ include("utils/utils.jl")
 
 # ---- exports ----
 # core
-export FunctionClass, basis, basis_deriv, nbasis, powers
+export FunctionClass, RingClass, basis, basis_deriv, basis_gram, nbasis, powers
 export ParaMatrix, evaluate, evaluate_deriv, coefficients, function_class, coeff, nterms
 export paraeye, ⊗
 # classes

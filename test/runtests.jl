@@ -67,9 +67,12 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
             for θ in (0.13, 0.5, 0.81)
                 @test evaluate_deriv(A, θ) ≈ (A(θ + 1e-6) - A(θ - 1e-6)) / 2e-6 atol = 1e-5
             end
-            @test norm(A, 2) ≈ sqrt(sum(norm(c)^2 for c in A.coeffs))
+            # L² norm == sqrt(∫₀¹‖A(θ)‖_F² dθ): Gram formula vs independent quadrature
+            quad = sqrt(sum(norm(A(t))^2 for t in range(0, 1; length=4097)[1:4096]) / 4096)
+            @test norm(A, 2) ≈ quad rtol = 3e-3
         end
-        @test_throws Exception ParaMatrix([randn(2, 2)], Laurent(-1, 1))
+        @test_throws Exception ParaMatrix([randn(2, 2)], Laurent(-1, 1))          # wrong count
+        @test_throws Exception ParaMatrix([randn(2, 2), randn(3, 3), randn(2, 2)], Laurent(-1, 1))  # mismatched block sizes
     end
 
     # ====================================================================
@@ -324,5 +327,127 @@ const CLASSES = (Laurent(-2, 2), Laurent(0, 0), Analytic(2), Polynomial(3))
             cm = [copy(c) for c in Ar.coeffs]; cm[k][a, b] -= h
             @test Ār.coeffs[k][a, b] ≈ (Lc(cp) - Lc(cm)) / (2h) atol = 1e-5
         end
+
+        # `+` rrule: independent buffers for A,B (Mooncake-safe) + correct scatter
+        P = ParaMatrix([randn(MersenneTwister(i), 2, 2) for i in 1:3], Laurent(-1, 1))
+        Q = ParaMatrix([randn(MersenneTwister(10i), 2, 2) for i in 1:3], Laurent(-1, 1))
+        _, pbplus = ParaLinearAlgebra.rrule(+, P, Q)
+        Ȳp = ParaMatrix([randn(MersenneTwister(2i), ComplexF64, 2, 2) for i in 1:3], Laurent(-1, 1))
+        _, P̄, Q̄ = pbplus(Ȳp)
+        @test all(P̄.coeffs[k] ≈ Ȳp.coeffs[k] for k in 1:3)
+        @test P̄.coeffs !== Q̄.coeffs && all(P̄.coeffs[k] ≈ Q̄.coeffs[k] for k in 1:3)  # independent copies
+    end
+
+    # ====================================================================
+    # Post-review hardening: ring/ansatz contract, guards, ProductClass,
+    # non-square factorizations, and the previously-uncovered exports.
+    @testset "RingClass contract + ansatz errors" begin
+        @test Laurent <: RingClass && Polynomial <: RingClass && ProductClass <: RingClass
+        @test !(Fourier <: RingClass) && Fourier <: FunctionClass
+        F = ParaMatrix([randn(MersenneTwister(i), 2, 2) for i in 1:5], Fourier(2))  # ansatz, non-ring
+        @test_throws ErrorException F * F
+        @test_throws ErrorException F ⊗ F
+        @test_throws ErrorException F^2
+        @test_throws ErrorException coeff(F, 0)
+        @test_throws ErrorException one(F)
+        # evaluate / ∂_p / AD still work for the ansatz class
+        @test F(0.3) ≈ evaluate(F, 0.3)
+        @test evaluate_deriv(F, 0.3) ≈ (F(0.3 + 1e-6) - F(0.3 - 1e-6)) / 2e-6 atol = 1e-5
+    end
+
+    @testset "one / ^0 over ring classes" begin
+        for cls in (Laurent(-1, 1), Polynomial(2), Analytic(2))
+            A = randpm(3, cls; seed=1)
+            @test (A^0)(0.37) ≈ I
+            @test one(A)(0.37) ≈ I
+        end
+        @test_throws ErrorException one(randpm(2, Laurent(1, 2); seed=1))  # no zero power
+    end
+
+    @testset "ProductClass (multi-parameter)" begin
+        pc = ProductClass(Laurent(-1, 1), Laurent(-1, 1))
+        @test pc isa RingClass
+        @test nbasis(pc) == 9
+        A = ParaMatrix([randn(MersenneTwister(i), ComplexF64, 2, 2) for i in 1:9], pc)
+        B = ParaMatrix([randn(MersenneTwister(20i), ComplexF64, 2, 2) for i in 1:9], pc)
+        for ps in ((0.1, 0.7), (0.4, 0.4), (0.83, 0.21))
+            @test A(ps) ≈ sum(basis(pc, ps)[k] * A.coeffs[k] for k in 1:9)
+            @test (A * B)(ps) ≈ A(ps) * B(ps)                         # 2-D convolution theorem
+            @test para(A)(ps) ≈ A(ps)'                                # multi-axis para-adjoint
+        end
+        # per-axis ∂ vs finite difference; scalar form must error
+        h = 1e-6
+        ps = (0.3, 0.6)
+        d1 = (A((ps[1] + h, ps[2])) - A((ps[1] - h, ps[2]))) / 2h
+        @test evaluate_deriv(A, ps, 1) ≈ d1 atol = 1e-5
+        d2 = (A((ps[1], ps[2] + h)) - A((ps[1], ps[2] - h))) / 2h
+        @test evaluate_deriv(A, ps, 2) ≈ d2 atol = 1e-5
+        @test_throws ArgumentError basis_deriv(pc, ps)
+        # L² norm over the 2-torus via 2-D quadrature
+        N = 64
+        quad = sqrt(
+            sum(norm(A((s, t)))^2 for s in range(0, 1; length=N + 1)[1:N],
+                t in range(0, 1; length=N + 1)[1:N]) / N^2,
+        )
+        @test norm(A) ≈ quad rtol = 3e-3
+    end
+
+    @testset "Solver guards (no silent failures)" begin
+        # spectral_factor: N < L and asymmetric window must error, not mis-factor
+        M0 = randpm(2, Analytic(3); seed=1)
+        G = para(M0) * M0 + paraeye(2, ComplexF64, Laurent(-3, 3))
+        @test_throws ArgumentError spectral_factor(G; N=2)                 # N < L=3
+        @test_throws ErrorException spectral_factor(randpm(2, Analytic(2); seed=1))  # asymmetric
+        # lyapd: ρ(A) ≥ 1 must error
+        big = ParaMatrix([fill(2.0 + 0im, 1, 1)], Laurent(0, 0))
+        @test_throws ArgumentError lyapd(big, paraeye(1, ComplexF64, Laurent(0, 0)))
+        # cocycle_exponent: degenerate (zero) transfer must error
+        Z = ParaMatrix([zeros(ComplexF64, 2, 2)], Laurent(0, 0))
+        @test_throws ArgumentError cocycle_exponent(Z, 1, 5)
+        # inv on a non-para-unitary matrix must error
+        @test_throws ErrorException inv(randpm(2, Laurent(-1, 1); seed=3))
+        # A\b WARNS when the Laurent fit cannot converge: identity A, order-9 true
+        # solution exceeds the default order-8 fit ⇒ residual > tol ⇒ @warn fires.
+        Ai = paraeye(2, ComplexF64, Laurent(0, 0))
+        x9 = randpm(2, Laurent(-9, 9); seed=7)
+        @test_logs (:warn,) (Ai \ (Ai * x9))
+    end
+
+    @testset "Non-square factorizations" begin
+        A = randpm(4, 2, Laurent(-1, 1); seed=5)            # tall 4×2
+        Fq, Fs, Fl = qr(A; nsample=8), svd(A; nsample=8), lq(A; nsample=8)
+        for (i, t) in enumerate(Fq.ts)
+            At = Matrix(A(t))
+            @test Fq.Q[i]' * Fq.Q[i] ≈ I(2) atol = 1e-10        # column isometry (not unitary)
+            @test Fq.Q[i] * Fq.R[i] ≈ At atol = 1e-10
+            @test Fs.U[i] * Diagonal(Fs.S[i]) * Fs.V[i]' ≈ At atol = 1e-10
+        end
+    end
+
+    @testset "Previously-uncovered exports" begin
+        c0, c1, c2 = [randn(ComplexF64, 2, 2) for _ in 1:3]
+        A = ParaMatrix([c0, c1, c2], Laurent(-1, 1))
+        @test coeff(A, -1) === c0 && coeff(A, 0) === c1 && coeff(A, 1) === c2  # index arithmetic
+        @test nterms(A) == 3 && coefficients(A) === A.coeffs && function_class(A) === A.class
+
+        @test para_gram(A)(0.3) ≈ (para(A) * A)(0.3) atol = 1e-12
+
+        rk = ParaMatrix([ComplexF64[1 0; 0 0], ComplexF64[0 1; 0 0]], Laurent(0, 1))  # rank 1
+        @test rank_profile(rk; nsample=32, tol=1e-9) == (1, 1, 0.0)
+        @test numerical_rank(rk; nsample=16) == LinearAlgebra.rank(rk; nsample=16) == 1
+
+        H = para(A) * A
+        @test isparahermitian(H) && !isparahermitian(A)        # true and false cases
+        @test isparahermitian(H) && !isparaunitary(H)          # distinct predicates
+
+        ts, vals = on_circle(tr, A; nsample=8)
+        @test all(vals[i] ≈ tr(Matrix(A(ts[i]))) for i in eachindex(ts))
+
+        # optimize!: descent on a convex coefficient loss must decrease it
+        B = ParaMatrix([randn(MersenneTwister(i), 2, 2) for i in 1:3], Laurent(-1, 1))
+        L(M) = sum(norm(c)^2 for c in M.coeffs)
+        g(M) = 2 .* M.coeffs
+        _, hist = optimize!(B, g; steps=50, lr=0.05, loss=L)
+        @test hist[end] < hist[1] && issorted(hist; rev=true)
     end
 end

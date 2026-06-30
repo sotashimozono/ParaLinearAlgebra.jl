@@ -37,7 +37,13 @@ end
     eigen(A::ParaMatrix; nsample=128) -> ParaEigen
 
 Eigendecomposition of `A(θ)` sampled on the circle. `F::ParaEigen` is callable
-(`F(θ) == eigen(A(θ))`) and exposes `F.values`, `F.vectors` (sequences over `F.ts`).
+(`F(θ) == eigen(A(θ))`) and exposes `F.values`, `F.vectors`.
+
+!!! note "Return shape differs from `LinearAlgebra.eigen`"
+    `F.values`/`F.vectors` are **sequences over the grid** `F.ts` (a `Vector` of
+    per-θ eigenvalue vectors / eigenvector matrices), NOT a single vector/matrix.
+    Destructuring `vals, vecs = eigen(A)` therefore yields `Vector{Vector}` /
+    `Vector{Matrix}`. For a single point use `eigen(A(θ))`.
 """
 function LinearAlgebra.eigen(A::ParaMatrix; nsample::Int=128)
     ts = collect(_circle(nsample))
@@ -57,7 +63,8 @@ Base.length(::ParaEigen) = 2
 """
     eigvals(A::ParaMatrix; nsample=128) -> Vector
 
-The eigenvalue functions sampled on the circle (`out[i] == eigvals(A(ts[i]))`).
+The eigenvalue functions sampled on the circle: `out[i] == eigvals(A(θᵢ))` for
+`θᵢ` uniform on `[0,1)` (a `Vector` of per-θ eigenvalue vectors).
 """
 function LinearAlgebra.eigvals(A::ParaMatrix; nsample::Int=128)
     return [eigvals(Matrix(A(t))) for t in _circle(nsample)]
@@ -74,7 +81,8 @@ end
     svd(A::ParaMatrix; nsample=128) -> ParaSVD
 
 SVD of `A(θ)` sampled on the circle. Callable (`F(θ) == svd(A(θ))`); exposes
-`F.U`, `F.S`, `F.V`. Reconstruction: `F.U[i]*Diagonal(F.S[i])*F.V[i]' ≈ A(F.ts[i])`.
+`F.U`, `F.S`, `F.V` as **sequences over `F.ts`** (not single matrices — see
+[`eigen`](@ref)'s note). Reconstruction: `F.U[i]*Diagonal(F.S[i])*F.V[i]' ≈ A(F.ts[i])`.
 """
 function LinearAlgebra.svd(A::ParaMatrix; nsample::Int=128)
     ts = collect(_circle(nsample))
@@ -96,7 +104,8 @@ Base.length(::ParaSVD) = 3
 """
     svdvals(A::ParaMatrix; nsample=128) -> Vector
 
-The singular-value functions sampled on the circle (`out[i] == svdvals(A(ts[i]))`).
+The singular-value functions sampled on the circle: `out[i] == svdvals(A(θᵢ))`
+for `θᵢ` uniform on `[0,1)`.
 """
 function LinearAlgebra.svdvals(A::ParaMatrix; nsample::Int=128)
     return [svdvals(Matrix(A(t))) for t in _circle(nsample)]
@@ -223,7 +232,8 @@ end
     polar(A::ParaMatrix; nsample=128) -> ParaPolar
 
 Polar factors `A(θ) = U(θ)P(θ)` sampled on the circle: `F.U[i]` is the
-(para-)unitary gauge (`F.U[i]'F.U[i] ≈ I` — the canonical isometry) and `F.P[i] ⪰ 0`.
+(para-)unitary gauge and `F.P[i] ⪰ 0` Hermitian. For square or tall `A` (`m ≥ n`)
+`F.U[i]'F.U[i] ≈ I` (column isometry); for wide `A` it is `F.U[i]*F.U[i]' ≈ I`.
 """
 function polar(A::ParaMatrix; nsample::Int=128)
     ts = collect(_circle(nsample))

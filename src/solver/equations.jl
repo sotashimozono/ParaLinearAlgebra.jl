@@ -1,8 +1,17 @@
 # solver/equations.jl — parameterized matrix equations / linear solves.
 # Return shapes follow KrylovKit: a solution plus an `info` NamedTuple.
 
-# discrete Lyapunov / Stein solve  X = A X A† + Q  (vectorized (I − Ā⊗A) x = vec Q)
+# discrete Lyapunov / Stein solve  X = A X A† + Q  (vectorized (I − Ā⊗A) x = vec Q).
+# Bounded solution exists only for ρ(A) < 1, which is checked (otherwise the result
+# is meaningless / the system is singular).
 function _stein_solve(A::AbstractMatrix, Q::AbstractMatrix)
+    ρ = maximum(abs, eigvals(A))
+    ρ < 1 || throw(
+        ArgumentError(
+            "lyapd/_stein_solve: spectral radius ρ(A)=$(round(ρ; digits=6)) ≥ 1; the " *
+            "discrete-Lyapunov (Stein) equation has no bounded solution",
+        ),
+    )
     n = size(A, 1)
     X = reshape((I - kron(conj(A), A)) \ vec(Q), n, n)
     return (X + X') / 2
@@ -12,7 +21,8 @@ end
     lyapd(A, Q; nsample=128) -> (ts, Xs)
 
 Pointwise discrete-Lyapunov (Stein) fixed point `X(θ) = A(θ) X(θ) A(θ)† + Q(θ)`
-on the circle (needs `ρ(A(θ)) < 1`). Named after the discrete Lyapunov solver.
+on the circle. Requires `ρ(A(θ)) < 1` at every sample (a clear error is raised
+otherwise).
 """
 function lyapd(A::ParaMatrix{T,S,<:Laurent}, Q::ParaMatrix; nsample::Int=128) where {T,S}
     ts = _circle(nsample)
@@ -35,6 +45,12 @@ function cocycle_exponent(E::ParaMatrix{T,S,<:Laurent}, p::Int, q::Int; θ0::Rea
     for k in 0:(q - 1)
         M = Matrix(E(mod(θ0 + k * α, 1.0))) * M
         nrm = norm(M)
+        iszero(nrm) && throw(
+            ArgumentError(
+                "cocycle_exponent: transfer cocycle collapsed to zero at step k=$k " *
+                "(θ=$(round(mod(θ0 + k * α, 1.0); digits=6))); exponent is -∞/undefined",
+            ),
+        )
         M ./= nrm
         logscale += log(nrm)
     end
@@ -69,6 +85,14 @@ end
 """
     A \\ b
 
-The fitted Laurent solution of `A(θ) x(θ) = b(θ)` (see [`para_solve`](@ref)).
+The fitted Laurent solution of `A(θ) x(θ) = b(θ)` (see [`para_solve`](@ref)). Warns
+if the fit does not converge (the true solution is rational / needs a higher order);
+use [`para_solve`](@ref) directly to inspect `info.residual`.
 """
-Base.:\(A::ParaMatrix{T,S,<:Laurent}, b::ParaMatrix) where {T,S} = first(para_solve(A, b))
+function Base.:\(A::ParaMatrix{T,S,<:Laurent}, b::ParaMatrix) where {T,S}
+    x, info = para_solve(A, b)
+    info.converged ||
+        @warn "A\\b: Laurent fit did not converge (residual=$(info.residual)); the solution is rational — raise `order` via para_solve." maxlog =
+            3
+    return x
+end

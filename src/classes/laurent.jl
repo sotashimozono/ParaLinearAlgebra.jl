@@ -12,7 +12,7 @@ Complex Laurent series in the angle `θ ∈ R/Z`, weights `exp(2πi k θ)` for
 `k = lo:hi`. The ring class for ParaMatrix products and the para-adjoint;
 the natural class for twisted-boundary / flux parameters.
 """
-struct Laurent <: FunctionClass
+struct Laurent <: RingClass
     lo::Int
     hi::Int
     function Laurent(lo::Int, hi::Int)
@@ -35,22 +35,10 @@ end
 
 _prodclass(a::Laurent, b::Laurent) = Laurent(a.lo + b.lo, a.hi + b.hi)
 
-# identity / one
-"""
-    paraeye(d, T, class::Laurent) -> ParaMatrix
+# {exp(2πikθ)} is L²-orthonormal on [0,1) ⇒ the Gram is the identity (exact Parseval).
+basis_gram(c::Laurent) = Matrix{Float64}(I, nbasis(c), nbasis(c))
 
-The `d×d` identity ParaMatrix (`I` at power 0) of element type `T`.
-"""
-function paraeye(d::Int, ::Type{T}, class::Laurent) where {T}
-    return ParaMatrix(
-        [k == 0 ? Matrix{T}(I, d, d) : zeros(T, d, d) for k in powers(class)], class
-    )
-end
-function Base.one(A::ParaMatrix{T,S,<:Laurent}) where {T,S}
-    size(A, 1) == size(A, 2) || error("one(A) needs a square ParaMatrix")
-    0 in powers(A.class) || error("one(A) needs 0 in the power window")
-    return paraeye(size(A, 1), T, A.class)
-end
+# `paraeye`/`one` are generic over RingClass (defined in core/paramatrix.jl).
 
 # para-adjoint  Ã(z) = A(1/z̄)†  ⇒  Ã_m = (A_{-m})†, window negates
 _adj(c) = copy(c')
@@ -79,7 +67,9 @@ end
 """
     isparaunitary(A) -> Bool
 
-Whether `para(A) * A` is the identity para-matrix (unitary on the circle).
+Whether `para(A) * A` is the identity para-matrix — i.e. **left** para-unitary
+(`Aᴴ(θ)A(θ) = I` on the circle). For square `A` this is two-sided unitarity; for
+a tall `A` it is column-isometry only (and `inv` is then invalid).
 """
 function isparaunitary(A::ParaMatrix{T,S,<:Laurent}; tol=1e-9) where {T,S}
     P = para(A) * A
@@ -88,9 +78,10 @@ function isparaunitary(A::ParaMatrix{T,S,<:Laurent}; tol=1e-9) where {T,S}
 end
 
 """
-    ispositive(A; nsample) -> Bool
+    ispositive(A; nsample, tol=-1e-9) -> Bool
 
-Whether `A(θ) ⪰ 0` for all sampled `θ` on the circle.
+Whether the minimum eigenvalue of `A(θ)` is `≥ tol` (default `-1e-9`, a
+numerically tolerant PSD check) for all sampled `θ` on the circle.
 """
 function ispositive(A::ParaMatrix{T,S,<:Laurent}; nsample=64, tol=-1e-9) where {T,S}
     return all(

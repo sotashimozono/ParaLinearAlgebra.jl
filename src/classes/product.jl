@@ -9,7 +9,7 @@ The product of one-parameter classes, for a parameterized matrix depending on a
 tuple of parameters. Ring structure (and para-adjoint, for all-`Laurent`
 products) is inherited axis-wise.
 """
-struct ProductClass{TT<:Tuple} <: FunctionClass
+struct ProductClass{TT<:Tuple} <: RingClass
     classes::TT
 end
 ProductClass(cs::FunctionClass...) = ProductClass(cs)
@@ -23,6 +23,38 @@ function basis(pc::ProductClass, ps)
     return vec([
         prod(bs[d][I[d]] for d in eachindex(bs)) for I in CartesianIndices(map(length, bs))
     ])
+end
+
+# partial derivative along axis `dim` (product rule): differentiate factor `dim`,
+# keep the others. The scalar 2-arg form is undefined for a multi-parameter class.
+function basis_deriv(pc::ProductClass, ps, dim::Integer)
+    1 ≤ dim ≤ length(pc.classes) ||
+        throw(ArgumentError("dim=$dim out of range 1:$(length(pc.classes))"))
+    # keep `bs` a TUPLE so `map(length, bs)` is a tuple and CartesianIndices is N-D
+    bs = ntuple(
+        d -> d == dim ? basis_deriv(pc.classes[d], ps[d]) : basis(pc.classes[d], ps[d]),
+        length(pc.classes),
+    )
+    return vec([prod(bs[d][I[d]] for d in eachindex(bs)) for I in CartesianIndices(map(length, bs))])
+end
+basis_deriv(pc::ProductClass, ps) = throw(
+    ArgumentError(
+        "ProductClass derivative is per-axis: call basis_deriv(class, ps, dim) or " *
+        "evaluate_deriv(A, ps, dim), not the scalar 2-arg form",
+    ),
+)
+
+# separable L² Gram:  M_{IJ} = ∏_d M^d_{I[d],J[d]}
+function basis_gram(pc::ProductClass)
+    grams = map(basis_gram, pc.classes)
+    loc = map(c -> Dict(p => i for (i, p) in enumerate(powers(c))), pc.classes)
+    pw = powers(pc)
+    n = length(pw)
+    M = Matrix{Float64}(undef, n, n)
+    for i in 1:n, j in 1:n
+        M[i, j] = prod(grams[d][loc[d][pw[i][d]], loc[d][pw[j][d]]] for d in eachindex(grams))
+    end
+    return M
 end
 
 _prodclass(a::ProductClass, b::ProductClass) =

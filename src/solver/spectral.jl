@@ -18,6 +18,12 @@ function spectral_factor(G::ParaMatrix{T,S,<:Laurent}; N::Int=24) where {T,S}
     c = G.class
     L = c.hi
     c.lo == -L || error("spectral_factor needs a symmetric window, got $(c)")
+    N ≥ L || throw(
+        ArgumentError(
+            "spectral_factor: Toeplitz size N=$N must be ≥ window half-width L=$L; " *
+            "otherwise the block-Toeplitz is incomplete and the factor would be wrong",
+        ),
+    )
     d = size(G, 1)
     TT = float(T)
     Tb = zeros(TT, (N + 1) * d, (N + 1) * d)
@@ -27,7 +33,14 @@ function spectral_factor(G::ParaMatrix{T,S,<:Laurent}; N::Int=24) where {T,S}
             Tb[(i * d + 1):((i + 1) * d), (j * d + 1):((j + 1) * d)] = coeff(G, m)
         end
     end
-    Lc = cholesky(Hermitian(Tb)).L
+    Lc = try
+        cholesky(Hermitian(Tb)).L
+    catch e
+        e isa LinearAlgebra.PosDefException || rethrow()
+        ispositive(G) ||
+            error("spectral_factor: G is not positive on the circle (check ispositive(G))")
+        error("spectral_factor: Toeplitz Cholesky failed though G is PSD — G is near-singular or N=$N is too small; try a larger N")
+    end
     blk(a, b) = Matrix(Lc[(a * d + 1):((a + 1) * d), (b * d + 1):((b + 1) * d)])
     Mcoeffs = [blk(N, N - k) for k in 0:L]
     return ParaMatrix(Mcoeffs, Analytic(L))
