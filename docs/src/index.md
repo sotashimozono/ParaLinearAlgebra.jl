@@ -1,7 +1,7 @@
-# MyModule.jl
+# ParaLinearAlgebra.jl
 
 ## Models
 
 ```@autodocs
-Modules = [MyModule]
+Modules = [ParaLinearAlgebra]
 ```
