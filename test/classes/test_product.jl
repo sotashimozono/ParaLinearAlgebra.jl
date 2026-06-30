@@ -54,8 +54,10 @@ end
     # correct arity works, and a vector is accepted equivalently to a tuple
     @test A((0.2, 0.3)) ≈ A([0.2, 0.3])
     @test length(basis(pc, (0.2, 0.3))) == nbasis(pc)
-    # decomposing a multi-parameter object no longer returns silent garbage: the 1-D
-    # samplers call A(scalar), which now errors (true N-D support comes next stage)
-    @test_throws ArgumentError eigen(A)
-    @test_throws ArgumentError svd(A)
+    # decomposition now samples the FULL N-D grid (no more silent 1-D garbage):
+    # F.ts holds 2-tuples and the callable agrees pointwise with eigen(A(p))
+    F = eigen(A; nsample=4)
+    @test length(F.ts) == 4^2
+    @test all(p -> p isa Tuple && length(p) == 2, F.ts)
+    @test F((0.2, 0.3)).values ≈ eigen(A((0.2, 0.3))).values
 end

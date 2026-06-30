@@ -8,12 +8,16 @@
 # FUNCTIONS of θ — generally NOT members of any finite class — so they are not
 # exact `ParaMatrix` factors (unlike `det`, `inv` for para-unitary, `para`, and
 # `spectral_factor`, which ARE in-class). Each returns a Para-factorization object
-# that is (i) **callable**, `F(θ)` = the standard factorization of `A(θ)`, and
-# (ii) **sampled** on a circle grid `F.ts` with the factor sequences exposed under
-# the usual property names (`F.values`, `F.U`, `F.Q`, …). Because the sampled
-# factor at `ts[i]` is *by construction* `F(ts[i])`, the identity
+# that is (i) **callable**, `F(p)` = the standard factorization of `A(p)`, and
+# (ii) **sampled** on the parameter grid `F.ts` — the circle for ONE parameter, or
+# for a multi-parameter `ProductClass` the FULL N-D product grid (then `F.ts` holds
+# n-tuples) — with the factor sequences exposed under the usual property names
+# (`F.values`, `F.U`, `F.Q`, …). Because the sampled factor at `ts[i]` is *by
+# construction* `F(ts[i])`, the identity
 #     decompose-then-evaluate   ==   evaluate-then-decompose
-# i.e. `eigen(A)(θ) == eigen(A(θ))`, holds exactly.
+# i.e. `eigen(A)(p) == eigen(A(p))`, holds exactly — POINTWISE. Over ≥2 parameters
+# there is in general no globally smooth gauge (see `_paramgrid`); use the
+# quantum-geometry tools for gauge-invariant geometry over a parameter manifold.
 
 # real, non-negative diagonal phase gauge (continuity / canonical convention)
 function _posphase!(Q, R)
@@ -26,6 +30,20 @@ function _posphase!(Q, R)
     return Q, R
 end
 
+# Sampling grid for the SAMPLED factorizations. A 1-parameter class is sampled on
+# the circle (scalars); a multi-parameter `ProductClass` on the FULL N-D product
+# grid (one circle per axis), so each sample point is an n-tuple and the factor is
+# the pointwise decomposition there. NOTE (Kato/Rellich): over ≥2 parameters there
+# is in general NO globally continuous/smooth choice of eigenvectors/singular
+# vectors (degeneracies = codimension-2 "diabolical points"; the obstruction is the
+# Chern number). These objects therefore promise POINTWISE correctness only — for
+# gauge-invariant geometry over a parameter manifold use the quantum-geometry tools.
+_paramgrid(::FunctionClass, nsample::Int) = collect(_circle(nsample))
+function _paramgrid(pc::ProductClass, nsample::Int)
+    g = _circle(nsample)
+    return vec([t for t in Iterators.product(ntuple(_ -> g, length(pc.classes))...)])
+end
+
 # ---------- eigen ----------------------------------------------------------
 """
     ParaEigen
@@ -35,7 +53,7 @@ Sampled eigendecomposition of a `ParaMatrix` returned by `eigen`; callable
 """
 struct ParaEigen{PM<:ParaMatrix,F}
     parent::PM
-    ts::Vector{Float64}
+    ts::Vector
     facts::Vector{F}
     herm::Bool
 end
@@ -56,7 +74,7 @@ Eigendecomposition of `A(θ)` sampled on the circle. `F::ParaEigen` is callable
 # real (the Hermitian structure flowing into the spectral routine) — use for a
 # para-Hermitian A (`isparahermitian(A)`); the flag is stored so the callable agrees.
 function LinearAlgebra.eigen(A::ParaMatrix; nsample::Int=128, ishermitian::Bool=false)
-    ts = collect(_circle(nsample))
+    ts = _paramgrid(A.class, nsample)
     wrap = ishermitian ? Hermitian : identity
     return ParaEigen(A, ts, [eigen(wrap(Matrix(A(t)))) for t in ts], ishermitian)
 end
@@ -91,7 +109,7 @@ The eigenvalue functions sampled on the circle: `out[i] == eigvals(A(θᵢ))` fo
 """
 function LinearAlgebra.eigvals(A::ParaMatrix; nsample::Int=128, ishermitian::Bool=false)
     wrap = ishermitian ? Hermitian : identity
-    return [eigvals(wrap(Matrix(A(t)))) for t in _circle(nsample)]
+    return [eigvals(wrap(Matrix(A(t)))) for t in _paramgrid(A.class, nsample)]
 end
 
 # ---------- svd ------------------------------------------------------------
@@ -103,7 +121,7 @@ exposing `F.U`, `F.S`, `F.V`, `F.ts`.
 """
 struct ParaSVD{PM<:ParaMatrix,F}
     parent::PM
-    ts::Vector{Float64}
+    ts::Vector
     facts::Vector{F}
 end
 
@@ -115,7 +133,7 @@ SVD of `A(θ)` sampled on the circle. Callable (`F(θ) == svd(A(θ))`); exposes
 `eigen`'s note). Reconstruction: `F.U[i]*Diagonal(F.S[i])*F.V[i]' ≈ A(F.ts[i])`.
 """
 function LinearAlgebra.svd(A::ParaMatrix; nsample::Int=128)
-    ts = collect(_circle(nsample))
+    ts = _paramgrid(A.class, nsample)
     return ParaSVD(A, ts, [svd(Matrix(A(t))) for t in ts])
 end
 (F::ParaSVD)(θ) = svd(Matrix(getfield(F, :parent)(θ)))
@@ -147,7 +165,7 @@ The singular-value functions sampled on the circle: `out[i] == svdvals(A(θᵢ))
 for `θᵢ` uniform on `[0,1)`.
 """
 function LinearAlgebra.svdvals(A::ParaMatrix; nsample::Int=128)
-    return [svdvals(Matrix(A(t))) for t in _circle(nsample)]
+    return [svdvals(Matrix(A(t))) for t in _paramgrid(A.class, nsample)]
 end
 
 # ---------- qr / lq (canonical continuity gauge) ---------------------------
@@ -168,7 +186,7 @@ callable (`F(θ)`) and exposing `F.Q`, `F.R`, `F.ts`.
 """
 struct ParaQR{PM<:ParaMatrix,F}
     parent::PM
-    ts::Vector{Float64}
+    ts::Vector
     facts::Vector{F}
 end
 
@@ -180,7 +198,7 @@ QR of `A(θ)` sampled on the circle with the **canonical continuity gauge**
 `F.Q[i]'F.Q[i] ≈ I`) and `F.R`, with `F.Q[i]*F.R[i] ≈ A(F.ts[i])`.
 """
 function LinearAlgebra.qr(A::ParaMatrix; nsample::Int=128)
-    ts = collect(_circle(nsample))
+    ts = _paramgrid(A.class, nsample)
     return ParaQR(A, ts, [_qr_gauged(Matrix(A(t))) for t in ts])
 end
 (F::ParaQR)(θ) = _qr_gauged(Matrix(getfield(F, :parent)(θ)))
@@ -221,7 +239,7 @@ callable (`F(θ)`) and exposing `F.L`, `F.Q`, `F.ts`.
 """
 struct ParaLQ{PM<:ParaMatrix,F}
     parent::PM
-    ts::Vector{Float64}
+    ts::Vector
     facts::Vector{F}
 end
 
@@ -232,7 +250,7 @@ LQ of `A(θ)` sampled on the circle (canonical gauge; `F.Q[i]` isometric,
 `F.L[i]*F.Q[i] ≈ A(F.ts[i])`).
 """
 function LinearAlgebra.lq(A::ParaMatrix; nsample::Int=128)
-    ts = collect(_circle(nsample))
+    ts = _paramgrid(A.class, nsample)
     return ParaLQ(A, ts, [_lq_gauged(Matrix(A(t))) for t in ts])
 end
 (F::ParaLQ)(θ) = _lq_gauged(Matrix(getfield(F, :parent)(θ)))
@@ -261,7 +279,7 @@ Sampled LU (partial pivoting) of a `ParaMatrix` returned by `lu`; callable
 """
 struct ParaLU{PM<:ParaMatrix,F}
     parent::PM
-    ts::Vector{Float64}
+    ts::Vector
     facts::Vector{F}
 end
 
@@ -272,7 +290,7 @@ LU (partial pivoting) of `A(θ)` sampled on the circle. Callable; exposes
 `F.L`, `F.U`, `F.p`, with `F.L[i]*F.U[i] ≈ A(F.ts[i])[F.p[i], :]`.
 """
 function LinearAlgebra.lu(A::ParaMatrix; nsample::Int=128, check::Bool=true)
-    ts = collect(_circle(nsample))
+    ts = _paramgrid(A.class, nsample)
     return ParaLU(A, ts, [lu(Matrix(A(t)); check=check) for t in ts])
 end
 (F::ParaLU)(θ) = lu(Matrix(getfield(F, :parent)(θ)))
@@ -305,7 +323,7 @@ Sampled polar decomposition of a `ParaMatrix` returned by [`polar`](@ref); calla
 """
 struct ParaPolar{PM<:ParaMatrix,F}
     parent::PM
-    ts::Vector{Float64}
+    ts::Vector
     facts::Vector{F}
 end
 
@@ -322,7 +340,7 @@ Polar factors `A(θ) = U(θ)P(θ)` sampled on the circle: `F.U[i]` is the
 `F.U[i]'F.U[i] ≈ I` (column isometry); for wide `A` it is `F.U[i]*F.U[i]' ≈ I`.
 """
 function polar(A::ParaMatrix; nsample::Int=128)
-    ts = collect(_circle(nsample))
+    ts = _paramgrid(A.class, nsample)
     return ParaPolar(A, ts, [_polar(Matrix(A(t))) for t in ts])
 end
 (F::ParaPolar)(θ) = _polar(Matrix(getfield(F, :parent)(θ)))
@@ -355,6 +373,6 @@ function LinearAlgebra.pinv(
     A::ParaMatrix{T}; atol::Real=0, rtol::Real=0, nsample::Int=128
 ) where {T}
     rt = rtol > 0 ? rtol : (atol > 0 ? 0.0 : eps(real(float(one(T)))) * minimum(size(A)))
-    ts = collect(_circle(nsample))
+    ts = _paramgrid(A.class, nsample)
     return ts, [pinv(Matrix(A(t)); atol=atol, rtol=rt) for t in ts]
 end
