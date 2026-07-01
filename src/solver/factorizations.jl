@@ -2,7 +2,7 @@
 #
 # These OVERLOAD the standard `LinearAlgebra` verbs on `ParaMatrix`, so the same
 # function names dispatch naturally:  `eigen(A)`, `svd(A)`, `qr(A)`, `lu(A)`,
-# `eigvals(A)`, `svdvals(A)`, `pinv(A)`  all work when `A::ParaMatrix`.
+# `eigvals(A)`, `svdvals(A)`, `pinv(A)`  all work when `A::AbstractParaMatrix`.
 #
 # SCIENTIFIC NOTE. The QR/SVD/LU/eigendecomposition of A(θ) are algebraic/analytic
 # FUNCTIONS of θ — generally NOT members of any finite class — so they are not
@@ -58,7 +58,7 @@ struct ParaEigen{PM,F}
 end
 
 """
-    eigen(A::ParaMatrix; nsample=128) -> ParaEigen
+    eigen(A::AbstractParaMatrix; nsample=128) -> ParaEigen
 
 Eigendecomposition of `A(θ)` sampled on the circle. `F::ParaEigen` is callable
 (`F(θ) == eigen(A(θ))`) and exposes `F.values`, `F.vectors`.
@@ -72,8 +72,10 @@ Eigendecomposition of `A(θ)` sampled on the circle. `F::ParaEigen` is callable
 # `ishermitian=true` wraps each A(θ) in `Hermitian` so the spectrum is guaranteed
 # real (the Hermitian structure flowing into the spectral routine) — use for a
 # para-Hermitian A (`isparahermitian(A)`); the flag is stored so the callable agrees.
-function LinearAlgebra.eigen(A::ParaMatrix; nsample::Int=128, ishermitian::Bool=false)
-    ts = _paramgrid(A.class, nsample)
+function LinearAlgebra.eigen(
+    A::AbstractParaMatrix; nsample::Int=128, ishermitian::Bool=false
+)
+    ts = _paramgrid(function_class(A), nsample)
     wrap = ishermitian ? Hermitian : identity
     return ParaEigen(A, ts, [eigen(wrap(Matrix(A(t)))) for t in ts], ishermitian)
 end
@@ -99,16 +101,18 @@ end
 Base.length(::ParaEigen) = 2
 
 """
-    eigvals(A::ParaMatrix; nsample=128) -> Vector
+    eigvals(A::AbstractParaMatrix; nsample=128) -> Vector
 
 The eigenvalue functions sampled on the circle: `out[i] == eigvals(A(θᵢ))` for
 `θᵢ` uniform on `[0,1)` (a `Vector` of per-θ eigenvalue vectors). With
 `ishermitian=true` each `A(θ)` is wrapped in `Hermitian` ⇒ the bands are real
 (use for a para-Hermitian `A`).
 """
-function LinearAlgebra.eigvals(A::ParaMatrix; nsample::Int=128, ishermitian::Bool=false)
+function LinearAlgebra.eigvals(
+    A::AbstractParaMatrix; nsample::Int=128, ishermitian::Bool=false
+)
     wrap = ishermitian ? Hermitian : identity
-    return [eigvals(wrap(Matrix(A(t)))) for t in _paramgrid(A.class, nsample)]
+    return [eigvals(wrap(Matrix(A(t)))) for t in _paramgrid(function_class(A), nsample)]
 end
 
 # ---------- svd ------------------------------------------------------------
@@ -125,14 +129,14 @@ struct ParaSVD{PM,F}
 end
 
 """
-    svd(A::ParaMatrix; nsample=128) -> ParaSVD
+    svd(A::AbstractParaMatrix; nsample=128) -> ParaSVD
 
 SVD of `A(θ)` sampled on the circle. Callable (`F(θ) == svd(A(θ))`); exposes
 `F.U`, `F.S`, `F.V` as **sequences over `F.ts`** (not single matrices — see
 `eigen`'s note). Reconstruction: `F.U[i]*Diagonal(F.S[i])*F.V[i]' ≈ A(F.ts[i])`.
 """
-function LinearAlgebra.svd(A::ParaMatrix; nsample::Int=128)
-    ts = _paramgrid(A.class, nsample)
+function LinearAlgebra.svd(A::AbstractParaMatrix; nsample::Int=128)
+    ts = _paramgrid(function_class(A), nsample)
     return ParaSVD(A, ts, [svd(Matrix(A(t))) for t in ts])
 end
 (F::ParaSVD)(θ) = svd(Matrix(getfield(F, :parent)(θ)))
@@ -158,13 +162,13 @@ end
 Base.length(::ParaSVD) = 3
 
 """
-    svdvals(A::ParaMatrix; nsample=128) -> Vector
+    svdvals(A::AbstractParaMatrix; nsample=128) -> Vector
 
 The singular-value functions sampled on the circle: `out[i] == svdvals(A(θᵢ))`
 for `θᵢ` uniform on `[0,1)`.
 """
-function LinearAlgebra.svdvals(A::ParaMatrix; nsample::Int=128)
-    return [svdvals(Matrix(A(t))) for t in _paramgrid(A.class, nsample)]
+function LinearAlgebra.svdvals(A::AbstractParaMatrix; nsample::Int=128)
+    return [svdvals(Matrix(A(t))) for t in _paramgrid(function_class(A), nsample)]
 end
 
 # ---------- qr / lq (canonical continuity gauge) ---------------------------
@@ -183,21 +187,21 @@ end
 Sampled QR (canonical continuity gauge) of a `ParaMatrix` returned by `qr`;
 callable (`F(θ)`) and exposing `F.Q`, `F.R`, `F.ts`.
 """
-struct ParaQR{PM<:ParaMatrix,F}
+struct ParaQR{PM,F}
     parent::PM
     ts::Vector
     facts::Vector{F}
 end
 
 """
-    qr(A::ParaMatrix; nsample=128) -> ParaQR
+    qr(A::AbstractParaMatrix; nsample=128) -> ParaQR
 
 QR of `A(θ)` sampled on the circle with the **canonical continuity gauge**
 (real, non-negative diagonal of `R`). Callable; exposes `F.Q` (isometries,
 `F.Q[i]'F.Q[i] ≈ I`) and `F.R`, with `F.Q[i]*F.R[i] ≈ A(F.ts[i])`.
 """
-function LinearAlgebra.qr(A::ParaMatrix; nsample::Int=128)
-    ts = _paramgrid(A.class, nsample)
+function LinearAlgebra.qr(A::AbstractParaMatrix; nsample::Int=128)
+    ts = _paramgrid(function_class(A), nsample)
     return ParaQR(A, ts, [_qr_gauged(Matrix(A(t))) for t in ts])
 end
 (F::ParaQR)(θ) = _qr_gauged(Matrix(getfield(F, :parent)(θ)))
@@ -236,20 +240,20 @@ end
 Sampled LQ (canonical continuity gauge) of a `ParaMatrix` returned by `lq`;
 callable (`F(θ)`) and exposing `F.L`, `F.Q`, `F.ts`.
 """
-struct ParaLQ{PM<:ParaMatrix,F}
+struct ParaLQ{PM,F}
     parent::PM
     ts::Vector
     facts::Vector{F}
 end
 
 """
-    lq(A::ParaMatrix; nsample=128) -> ParaLQ
+    lq(A::AbstractParaMatrix; nsample=128) -> ParaLQ
 
 LQ of `A(θ)` sampled on the circle (canonical gauge; `F.Q[i]` isometric,
 `F.L[i]*F.Q[i] ≈ A(F.ts[i])`).
 """
-function LinearAlgebra.lq(A::ParaMatrix; nsample::Int=128)
-    ts = _paramgrid(A.class, nsample)
+function LinearAlgebra.lq(A::AbstractParaMatrix; nsample::Int=128)
+    ts = _paramgrid(function_class(A), nsample)
     return ParaLQ(A, ts, [_lq_gauged(Matrix(A(t))) for t in ts])
 end
 (F::ParaLQ)(θ) = _lq_gauged(Matrix(getfield(F, :parent)(θ)))
@@ -276,20 +280,20 @@ Base.length(::ParaLQ) = 2
 Sampled LU (partial pivoting) of a `ParaMatrix` returned by `lu`; callable
 (`F(θ)`) and exposing `F.L`, `F.U`, `F.p`, `F.ts`.
 """
-struct ParaLU{PM<:ParaMatrix,F}
+struct ParaLU{PM,F}
     parent::PM
     ts::Vector
     facts::Vector{F}
 end
 
 """
-    lu(A::ParaMatrix; nsample=128) -> ParaLU
+    lu(A::AbstractParaMatrix; nsample=128) -> ParaLU
 
 LU (partial pivoting) of `A(θ)` sampled on the circle. Callable; exposes
 `F.L`, `F.U`, `F.p`, with `F.L[i]*F.U[i] ≈ A(F.ts[i])[F.p[i], :]`.
 """
-function LinearAlgebra.lu(A::ParaMatrix; nsample::Int=128, check::Bool=true)
-    ts = _paramgrid(A.class, nsample)
+function LinearAlgebra.lu(A::AbstractParaMatrix; nsample::Int=128, check::Bool=true)
+    ts = _paramgrid(function_class(A), nsample)
     return ParaLU(A, ts, [lu(Matrix(A(t)); check=check) for t in ts])
 end
 (F::ParaLU)(θ) = lu(Matrix(getfield(F, :parent)(θ)))
@@ -320,7 +324,7 @@ Base.length(::ParaLU) = 3
 Sampled polar decomposition of a `ParaMatrix` returned by [`polar`](@ref); callable
 (`F(θ)`) and exposing `F.U`, `F.P`, `F.ts`.
 """
-struct ParaPolar{PM<:ParaMatrix,F}
+struct ParaPolar{PM,F}
     parent::PM
     ts::Vector
     facts::Vector{F}
@@ -332,14 +336,14 @@ function _polar(M::AbstractMatrix)
 end
 
 """
-    polar(A::ParaMatrix; nsample=128) -> ParaPolar
+    polar(A::AbstractParaMatrix; nsample=128) -> ParaPolar
 
 Polar factors `A(θ) = U(θ)P(θ)` sampled on the circle: `F.U[i]` is the
 (para-)unitary gauge and `F.P[i] ⪰ 0` Hermitian. For square or tall `A` (`m ≥ n`)
 `F.U[i]'F.U[i] ≈ I` (column isometry); for wide `A` it is `F.U[i]*F.U[i]' ≈ I`.
 """
-function polar(A::ParaMatrix; nsample::Int=128)
-    ts = _paramgrid(A.class, nsample)
+function polar(A::AbstractParaMatrix; nsample::Int=128)
+    ts = _paramgrid(function_class(A), nsample)
     return ParaPolar(A, ts, [_polar(Matrix(A(t))) for t in ts])
 end
 (F::ParaPolar)(θ) = _polar(Matrix(getfield(F, :parent)(θ)))
@@ -361,7 +365,7 @@ Base.length(::ParaPolar) = 2
 
 # ---------- regularized pseudo-inverse (SVD divergence removal) -------------
 """
-    pinv(A::ParaMatrix; atol=0, rtol=…, nsample=128) -> (ts, Aplus)
+    pinv(A::AbstractParaMatrix; atol=0, rtol=…, nsample=128) -> (ts, Aplus)
 
 Regularized Moore–Penrose pseudo-inverse of `A(θ)` sampled on the circle, via the
 truncated SVD (singular values ≤ `max(atol, rtol·σ₁)` are dropped). This is the
@@ -369,10 +373,10 @@ truncated SVD (singular values ≤ `max(atol, rtol·σ₁)` are dropped). This i
 than inverted, so `Aplus[i]` stays bounded even where `A(ts[i])` is (near-)singular.
 """
 function LinearAlgebra.pinv(
-    A::ParaMatrix{T}; atol::Real=0, rtol::Real=0, nsample::Int=128
+    A::AbstractParaMatrix{T}; atol::Real=0, rtol::Real=0, nsample::Int=128
 ) where {T}
     rt = rtol > 0 ? rtol : (atol > 0 ? 0.0 : eps(real(float(one(T)))) * minimum(size(A)))
-    ts = _paramgrid(A.class, nsample)
+    ts = _paramgrid(function_class(A), nsample)
     return ts, [pinv(Matrix(A(t)); atol=atol, rtol=rt) for t in ts]
 end
 

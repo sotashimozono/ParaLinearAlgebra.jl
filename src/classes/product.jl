@@ -96,12 +96,12 @@ function _prodclass(a::ProductClass, b::ProductClass)
 end
 
 # multi-parameter para-adjoint: negate every axis index, adjoint each block (all-Laurent)
-function para(A::ParaMatrix{T,S,<:ProductClass}) where {T,S}
-    pc = A.class
+function para(A::AbstractParaMatrix{T,S,<:ProductClass}) where {T,S}
+    pc = function_class(A)
     all(c isa Laurent for c in pc.classes) ||
         error("para needs an all-Laurent product class")
     npc = ProductClass(map(c -> Laurent(-c.hi, -c.lo), pc.classes))
     op = powers(pc)
     idx = Dict(op[i] => i for i in eachindex(op))
-    return ParaMatrix([_adj(A.coeffs[idx[-m]]) for m in powers(npc)], npc)
+    return _rebuild(A, [_adj(coefficients(A)[idx[-m]]) for m in powers(npc)], npc)
 end

@@ -8,7 +8,9 @@
 # A `ParaMatrix` over a `ProductClass` is still the right tool when every entry
 # shares the same parameters; `BlockParaMatrix` is for genuinely independent ones.
 
-_blockarity(B::ParaMatrix) = B.class isa ProductClass ? length(B.class.classes) : 1
+function _blockarity(B::AbstractParaMatrix)
+    return function_class(B) isa ProductClass ? length(function_class(B).classes) : 1
+end
 _blockarity(::AbstractMatrix) = 0
 
 """
@@ -79,7 +81,7 @@ The number of (independent) parameters `M` consumes — the sum of the blocks' a
 """
 nparams(M::BlockParaMatrix) = M.nparams
 
-function _evalblock(B::ParaMatrix, sl, p)
+function _evalblock(B::AbstractParaMatrix, sl, p)
     return length(sl) == 1 ? B(p[first(sl)]) : B(ntuple(k -> p[sl[k]], length(sl)))
 end
 _evalblock(B::AbstractMatrix, _, _) = B
