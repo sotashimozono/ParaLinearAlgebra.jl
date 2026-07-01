@@ -393,13 +393,104 @@ function para_eigen(
     return (; U=U, D=D, residual=residual, winding=winding, mingap=mingap, order=ord)
 end
 
+# ---------- differentiable value functions (para_svdvals / para_eigvals) ----------
+# The singular values / eigenvalues are GAUGE-INVARIANT, so — unlike the full
+# `para_svd`/`para_eigen` (whose vector gauge-fixing is non-smooth and NOT AD-able) —
+# their FUNCTIONS fit and differentiate cleanly (per-θ svdvals/eigvals have ChainRules
+# rrules; the DFT-fit is linear). Diagonal comprehension (no `Diagonal`/`range`) keeps
+# it AD-transparent. Still approximate: band crossings give kinks ⇒ raise `order`.
+function _valfit(vals, r, order, N, ::Type{CT}) where {CT}
+    return [
+        [
+            (
+                if a == b
+                    sum(vals[j + 1][a] * cispi(-2 * k * (j / N)) for j in 0:(N - 1)) / N
+                else
+                    zero(CT)
+                end
+            ) for a in 1:r, b in 1:r
+        ] for k in (-order):order
+    ]
+end
+
+"""
+    para_svdvals(A; order=12, nsample=0) -> ParaMatrix
+
+The singular-value **functions** of a Laurent `ParaMatrix` `A` as a diagonal
+ParaMatrix (descending `σₖ(θ)` on the diagonal), via per-θ `svdvals` + DFT-fit.
+Unlike `para_svd` this is **differentiable** (singular values are gauge-invariant,
+no vector gauge-fixing), so it composes under reverse-mode AD. Approximate — fits to
+`Laurent(order)`; band crossings give kinks, so raise `order`. `nsample` defaults to
+`max(64, 16·order)`.
+"""
+function para_svdvals(
+    A::ParaMatrix{T,S,<:Laurent}; order::Int=12, nsample::Int=0
+) where {T,S}
+    r = minimum(size(A))
+    N = nsample > 0 ? nsample : max(64, 16 * order)
+    grid = [j / N for j in 0:(N - 1)]
+    sv = [svdvals(Matrix(A(t))) for t in grid]           # per-θ, sorted descending
+    return ParaMatrix(_valfit(sv, r, order, N, complex(float(T))), Laurent(-order, order))
+end
+
+"""
+    para_eigvals(H; order=12, nsample=0) -> ParaMatrix
+
+The eigenvalue **functions** (bands) of a **para-Hermitian** Laurent `ParaMatrix`
+`H` as a diagonal ParaMatrix (real, ascending `λₖ(θ)`), via per-θ Hermitian `eigvals`
++ DFT-fit. **Differentiable** (eigenvalues are gauge-invariant) — the AD-able
+counterpart of `para_eigen` for just the bands. Approximate (raise `order` at
+crossings); `@warn`s if `H` is not para-Hermitian.
+"""
+function para_eigvals(
+    H::ParaMatrix{T,S,<:Laurent}; order::Int=12, nsample::Int=0
+) where {T,S}
+    n = size(H, 1)
+    n == size(H, 2) ||
+        throw(DimensionMismatch("para_eigvals needs a square H; got $(size(H))"))
+    isparahermitian(H) || @warn(
+        "para_eigvals: H is not para-Hermitian; using the Hermitian part.", maxlog = 1
+    )
+    N = nsample > 0 ? nsample : max(64, 16 * order)
+    grid = [j / N for j in 0:(N - 1)]
+    ev = [eigvals(Hermitian(Matrix(H(t)))) for t in grid]   # real, ascending
+    return ParaMatrix(_valfit(ev, n, order, N, complex(float(T))), Laurent(-order, order))
+end
+
+# The full para_svd/para_eigen are NOT reverse-mode differentiable (non-smooth
+# singular/eigen gauge-fixing). Give a CLEAR error under AD instead of a cryptic
+# `llvmcall` failure, pointing at what IS differentiable.
+function ChainRulesCore.rrule(
+    ::typeof(para_svd), A::ParaMatrix{T,S,<:Laurent}; kw...
+) where {T,S}
+    return para_svd(A; kw...),
+    _ -> error(
+        "para_svd is not reverse-mode differentiable: the singular-vector gauge-fixing " *
+        "(branch matching + phase normalization) is non-smooth. Use `para_svdvals` for the " *
+        "(differentiable) singular-value functions, or `para_qr`/`para_lq` for a fully " *
+        "differentiable exact factorization.",
+    )
+end
+function ChainRulesCore.rrule(
+    ::typeof(para_eigen), H::ParaMatrix{T,S,<:Laurent}; kw...
+) where {T,S}
+    return para_eigen(H; kw...),
+    _ -> error(
+        "para_eigen is not reverse-mode differentiable: the eigenvector gauge-fixing is " *
+        "non-smooth. Use `para_eigvals` for the (differentiable) eigenvalue functions, or " *
+        "`para_qr`/`para_lq` for a fully differentiable exact factorization.",
+    )
+end
+
 # --- multivariate (multi-parameter) factorization: unavailable, and genuinely hard ---
 # AD status: `spectral_factor` (mutation-free ⇒ ChainRules `cholesky`) and `inv` (rrule,
 #   matrix-inverse identity) are differentiable, so `para_qr`/`para_lq` are FULLY
 #   AD-transparent (gauge `R`/`L` and para-unitary `Q`), Zygote-validated vs finite diff.
-# TODO: `para_svd`/`para_eigen` AD — the (non-smooth) singular/eigen gauge-fixing
-#   (argmax matching + phase normalization) is not AD-friendly; needs a smooth-gauge
-#   formulation. TODO: ordering convention (analytic vs spectrally-majorised) and
+# The full `para_svd`/`para_eigen` are NOT AD (non-smooth singular/eigen gauge-fixing:
+#   argmax matching + phase normalization) — differentiating them raises a clear error.
+#   The gauge-invariant VALUE functions ARE differentiable: use `para_svdvals` /
+#   `para_eigvals`. TODO: an AD-able full para_svd/para_eigen needs a smooth-gauge
+#   formulation (open). TODO: ordering convention (analytic vs spectrally-majorised) and
 #   crossing passage for `para_svd`/`para_eigen` (see their in-source TODOs).
 #
 # For ≥2 parameters the parameterized factorizations are unavailable BY DESIGN — it is
@@ -434,4 +525,10 @@ function para_svd(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
 end
 function para_eigen(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
     return _multivar_unavailable("para_eigen")
+end
+function para_svdvals(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+    return _multivar_unavailable("para_svdvals")
+end
+function para_eigvals(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+    return _multivar_unavailable("para_eigvals")
 end

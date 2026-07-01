@@ -88,3 +88,28 @@ end
         @test _flat(Zygote.gradient(Llq, c0)[1], c0) ≈ _fdgrad(Llq, c0) atol = 1e-5
     end
 end
+
+# para_svd/para_eigen are NOT reverse-mode differentiable (non-smooth gauge-fixing) —
+# they error clearly under AD; but the gauge-invariant VALUE functions ARE (para_svdvals
+# / para_eigvals). z^0 = diag(3,1) keeps σ / bands separated so the value fns are smooth.
+@testset "Zygote ∘ para_svdvals / para_eigvals (differentiable); para_svd/para_eigen error" begin
+    for seed in SEEDS
+        c0 = [
+            0.2 .* randn(MersenneTwister(seed), 2, 2),
+            Float64[3 0; 0 1] .+ 0.2 .* randn(MersenneTwister(seed + 2), 2, 2),
+            0.2 .* randn(MersenneTwister(seed + 1), 2, 2),
+        ]
+        mk(c) = ParaMatrix(c, Laurent(-1, 1))
+        Lsv(c) = sum(abs2, para_svdvals(mk(c); order=8, nsample=128)(0.3))
+        @test _flat(Zygote.gradient(Lsv, c0)[1], c0) ≈ _fdgrad(Lsv, c0) atol = 1e-4
+        Lev(c) = sum(abs2, para_eigvals(para(mk(c)) * mk(c); order=8, nsample=128)(0.3))
+        @test _flat(Zygote.gradient(Lev, c0)[1], c0) ≈ _fdgrad(Lev, c0) atol = 1e-4
+        # full para_svd / para_eigen: differentiating raises a clear error
+        @test_throws ErrorException Zygote.gradient(
+            c -> real(sum(abs2, para_svd(mk(c); order=6).S(0.3))), c0
+        )
+        @test_throws ErrorException Zygote.gradient(
+            c -> real(sum(abs2, para_eigen(para(mk(c)) * mk(c); order=6).D(0.3))), c0
+        )
+    end
+end

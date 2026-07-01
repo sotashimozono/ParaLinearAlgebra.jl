@@ -73,6 +73,7 @@ export para, paraconj, parahermitianpart, isparahermitian, isparaunitary, isposi
 export ParaEigen, ParaSVD, ParaQR, ParaLQ, ParaLU, ParaPolar, polar, numerical_rank
 # solver — spectral / equations
 export para_gram, spectral_factor, para_qr, para_lq, para_svd, para_eigen
+export para_svdvals, para_eigvals
 export leading_eigen, lyapd, cocycle_exponent, para_solve
 # utils
 export on_circle, rank_profile, optimize!
