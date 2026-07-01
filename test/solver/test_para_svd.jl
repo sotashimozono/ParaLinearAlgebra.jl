@@ -103,3 +103,18 @@ end
     Fx = @test_logs (:warn,) match_mode = :any para_svd(Ax; order=8, gaptol=1e-2)
     @test Fx.mingap < 1e-2
 end
+
+@testset "para_svdvals: differentiable singular-value functions (counterpart of para_svd)" begin
+    cs = [3.0, 2.0, 1.0]
+    as = [0.25, 0.2, 0.15]
+    for d in (2, 3), seed in SEEDS
+        U0 = _constunitary(d, seed)
+        V0 = _constunitary(d, seed + 50)
+        A = U0 * _posdiag(cs[1:d], as[1:d]) * para(V0)
+        Sd = para_svdvals(A; order=6)
+        @test Sd isa ParaMatrix && size(Sd) == (d, d)
+        for θ in RNG_PTS
+            @test sort(real(diag(Sd(θ))); rev=true) ≈ svdvals(A(θ)) atol = 1e-6   # = svdvals
+        end
+    end
+end

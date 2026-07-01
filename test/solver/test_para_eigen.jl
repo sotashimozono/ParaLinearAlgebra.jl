@@ -99,3 +99,16 @@ end
     Fx = @test_logs (:warn,) match_mode = :any para_eigen(Hx; order=8, gaptol=1e-2)
     @test Fx.mingap < 1e-2
 end
+
+@testset "para_eigvals: differentiable eigenvalue functions (counterpart of para_eigen)" begin
+    cs = [2.0, 0.5, -1.5]
+    as = [0.3, 0.2, 0.25]
+    for d in (2, 3), seed in SEEDS
+        U0 = _constunitary(d, seed)
+        H = U0 * _realdiag(cs[1:d], as[1:d]) * para(U0)
+        D = para_eigvals(H; order=6)
+        for θ in RNG_PTS
+            @test sort(real(diag(D(θ)))) ≈ eigvals(Hermitian(Matrix(H(θ)))) atol = 1e-6  # = eigvals
+        end
+    end
+end

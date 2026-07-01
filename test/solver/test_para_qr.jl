@@ -57,4 +57,6 @@ end
     @test_throws ErrorException para_lq(A)
     @test_throws ErrorException para_svd(A)
     @test_throws ErrorException para_eigen(A)
+    @test_throws ErrorException para_svdvals(A)
+    @test_throws ErrorException para_eigvals(A)
 end
