@@ -188,3 +188,32 @@ function ChainRulesCore.rrule(::typeof(para), A::ParaMatrix{T,S,<:Laurent}) wher
     end
     return Y, para_back
 end
+
+# inverse pullback: for Y = R⁻¹, the matrix-inverse identity dY = −Y·dR·Y gives
+# R̄ = −para(Y)·Ȳ·para(Y) (para = the on-circle adjoint), projected onto R's power
+# window. This is exact for the true inverse (and para-unitary R, where inv = para);
+# for the rational (para_solve-fitted) inverse it is the standard exact-inverse
+# rrule applied to the fit — accurate to the same order as the forward fit. It also
+# makes `para_qr`/`para_lq` fully differentiable (their `Q = A·inv(R)` no longer
+# traces the non-AD `para_solve` internals).
+function ChainRulesCore.rrule(
+    ::typeof(inv), R::ParaMatrix{T,S,<:Laurent}; order::Int=8, tol=1e-9
+) where {T,S}
+    Y = inv(R; order=order, tol=tol)
+    d = size(R, 1)
+    Rc = R.class
+    function inv_back(Ȳ)
+        Ybar = ParaMatrix([copy(c) for c in unthunk(Ȳ).coeffs], Y.class)
+        full = -(para(Y) * Ybar * para(Y))            # −para(Y)·Ȳ·para(Y)
+        fc = full.class
+        R̄ = [
+            if (fc.lo ≤ k ≤ fc.hi)
+                copy(coeff(full, k))
+            else
+                zeros(eltype(first(full.coeffs)), d, d)
+            end for k in powers(Rc)
+        ]
+        return (NoTangent(), Tangent{typeof(R)}(; coeffs=R̄, class=NoTangent()))
+    end
+    return Y, inv_back
+end

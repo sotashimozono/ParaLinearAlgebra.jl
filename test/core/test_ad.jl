@@ -63,13 +63,12 @@ end
     end
 end
 
-# spectral_factor is mutation-free ⇒ AD flows through the ChainRules `cholesky` rule.
-# The canonicalization R/L gauge is therefore differentiable AS A spectral_factor
-# COMPOSITION (no `inv`): R = para(spectral_factor(para(A)·A)), L = spectral_factor(A·para(A)).
-# (`para_qr`/`para_lq` as functions are NOT AD-transparent — they also build the
-# para-unitary `Q` via the rational `inv`; differentiate the composition directly.)
+# spectral_factor is mutation-free ⇒ AD flows through the ChainRules `cholesky` rule;
+# together with the `inv` rrule (matrix-inverse identity in the para-ring) this makes
+# the exact factorizations para_qr / para_lq FULLY differentiable — both the
+# canonicalization gauge (R / L) and the para-unitary Q. Validated vs finite diff.
 # Real coeffs ⇒ real gradient, matching the real-direction finite difference.
-@testset "Zygote ∘ spectral_factor + R/L canonicalization gauge" begin
+@testset "Zygote ∘ spectral_factor + full para_qr / para_lq (inv rrule)" begin
     for seed in SEEDS
         c0 = [
             Matrix{Float64}(I, 2, 2),                          # A = I + small ⇒ Gram PD
@@ -79,9 +78,13 @@ end
         mk(c) = ParaMatrix(c, Laurent(-1, 1))
         Lsf(c) = sum(abs2, spectral_factor(para(mk(c)) * mk(c); N=8)(0.3))
         @test _flat(Zygote.gradient(Lsf, c0)[1], c0) ≈ _fdgrad(Lsf, c0) atol = 1e-5
-        Lr(c) = sum(abs2, para(spectral_factor(para(mk(c)) * mk(c); N=8))(0.3))  # R gauge
-        @test _flat(Zygote.gradient(Lr, c0)[1], c0) ≈ _fdgrad(Lr, c0) atol = 1e-5
-        Ll(c) = sum(abs2, spectral_factor(mk(c) * para(mk(c)); N=8)(0.3))        # L gauge
-        @test _flat(Zygote.gradient(Ll, c0)[1], c0) ≈ _fdgrad(Ll, c0) atol = 1e-5
+        # full para_qr: the gauge R AND the para-unitary Q (Q via the inv rrule)
+        function Lqr(c)
+            F = para_qr(mk(c); order=30, N=16)
+            return sum(abs2, F.Q(0.3)) + sum(abs2, F.R(0.3))
+        end
+        @test _flat(Zygote.gradient(Lqr, c0)[1], c0) ≈ _fdgrad(Lqr, c0) atol = 1e-5
+        Llq(c) = sum(abs2, para_lq(mk(c); order=30, N=16).Q(0.3))   # para_lq Q
+        @test _flat(Zygote.gradient(Llq, c0)[1], c0) ≈ _fdgrad(Llq, c0) atol = 1e-5
     end
 end

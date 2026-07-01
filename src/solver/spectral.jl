@@ -15,11 +15,10 @@ Spectral factorization of a symmetric para-Hermitian PD `G` via Bauer's method
 factor `M` (class `Analytic(hi)`) with `G = M · para(M)` on the circle.
 
 **Differentiable**: the block-Toeplitz is built mutation-free, so reverse-mode AD
-(e.g. Zygote) flows through the `cholesky` rule. The canonicalization R/L gauge is
-therefore differentiable **as a `spectral_factor` composition** —
-`R = para(spectral_factor(para(A)·A))`, `L = spectral_factor(A·para(A))`.
-(Differentiate that composition directly; `para_qr`/`para_lq` as functions are not
-AD-transparent — they also form the para-unitary `Q` via the rational `inv`.)
+(e.g. Zygote) flows through the `cholesky` rule. Together with the `inv` rrule
+(matrix-inverse identity in the para-ring) this makes `para_qr`/`para_lq` **fully
+differentiable** in the input's coefficients — both the canonicalization gauge
+(`R`/`L`) and the para-unitary `Q`.
 """
 function spectral_factor(G::ParaMatrix{T,S,<:Laurent}; N::Int=24) where {T,S}
     c = G.class
@@ -107,10 +106,16 @@ function para_qr(
     R = para(M)                              # ⟹ para(R)·R = M·para(M) = G  — the R-factor
     R⁻¹ = inv(R; order=order)                # rational; @warns if the Laurent fit needs more order
     Q = A * R⁻¹
-    Id = Matrix{complex(float(T))}(I, n, n)
-    grid = range(0, 1; length=(4N + 1))[1:(4N)]
-    residual = maximum(norm(Matrix(A(t)) - Matrix(Q(t)) * Matrix(R(t))) for t in grid)
-    isometry = maximum(norm(Matrix(Q(t))' * Matrix(Q(t)) - Id) for t in grid)
+    # diagnostics only ⇒ keep them out of the AD graph (a plain `range` has no Zygote
+    # adjoint, and residual/isometry are not differentiable outputs).
+    residual, isometry = ChainRulesCore.@ignore_derivatives begin
+        Id = Matrix{complex(float(T))}(I, n, n)
+        grid = range(0, 1; length=(4N + 1))[1:(4N)]
+        (
+            maximum(norm(Matrix(A(t)) - Matrix(Q(t)) * Matrix(R(t))) for t in grid),
+            maximum(norm(Matrix(Q(t))' * Matrix(Q(t)) - Id) for t in grid),
+        )
+    end
     return (; Q=Q, R=R, residual=residual, isometry=isometry)
 end
 
@@ -139,10 +144,14 @@ function para_lq(
     L = spectral_factor(G; N=N)              # G = L·para(L) — the L-factor (analytic)
     L⁻¹ = inv(L; order=order)                # rational; @warns if the Laurent fit needs more order
     Q = L⁻¹ * A
-    Id = Matrix{complex(float(T))}(I, m, m)
-    grid = range(0, 1; length=(4N + 1))[1:(4N)]
-    residual = maximum(norm(Matrix(A(t)) - Matrix(L(t)) * Matrix(Q(t))) for t in grid)
-    isometry = maximum(norm(Matrix(Q(t)) * Matrix(Q(t))' - Id) for t in grid)
+    residual, isometry = ChainRulesCore.@ignore_derivatives begin   # diagnostics: out of the AD graph
+        Id = Matrix{complex(float(T))}(I, m, m)
+        grid = range(0, 1; length=(4N + 1))[1:(4N)]
+        (
+            maximum(norm(Matrix(A(t)) - Matrix(L(t)) * Matrix(Q(t))) for t in grid),
+            maximum(norm(Matrix(Q(t)) * Matrix(Q(t))' - Id) for t in grid),
+        )
+    end
     return (; L=L, Q=Q, residual=residual, isometry=isometry)
 end
 
@@ -385,12 +394,13 @@ function para_eigen(
 end
 
 # --- multivariate (multi-parameter) factorization: unavailable, and genuinely hard ---
-# TODO: AD — only `spectral_factor` and the `para_qr`/`para_lq` gauge factors (`R`,`L`)
-#   are differentiable so far. Full `para_qr`/`para_lq` (the para-unitary `Q`, via the
-#   rational `inv`) and `para_svd`/`para_eigen` are NOT yet AD-transparent: `inv`'s
-#   Laurent-fit and the (non-smooth) singular/eigen gauge-fixing need a hand-written
-#   rrule. TODO: ordering convention (analytic vs spectrally-majorised) and crossing
-#   passage for `para_svd`/`para_eigen` (see their in-source TODOs).
+# AD status: `spectral_factor` (mutation-free ⇒ ChainRules `cholesky`) and `inv` (rrule,
+#   matrix-inverse identity) are differentiable, so `para_qr`/`para_lq` are FULLY
+#   AD-transparent (gauge `R`/`L` and para-unitary `Q`), Zygote-validated vs finite diff.
+# TODO: `para_svd`/`para_eigen` AD — the (non-smooth) singular/eigen gauge-fixing
+#   (argmax matching + phase normalization) is not AD-friendly; needs a smooth-gauge
+#   formulation. TODO: ordering convention (analytic vs spectrally-majorised) and
+#   crossing passage for `para_svd`/`para_eigen` (see their in-source TODOs).
 #
 # For ≥2 parameters the parameterized factorizations are unavailable BY DESIGN — it is
 # a hard, partly-open problem: in m-D, para-unitary FIR matrices do NOT factor into
