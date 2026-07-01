@@ -36,6 +36,13 @@ The canonical [`AbstractParaMatrix`](@ref): a matrix whose entries are functions
 a parameter `p` in `class`, `A(p) = Σ_k basis(class, p)_k · coeffs_k`. All
 coefficient blocks share one size. `A` is **callable**: `A(p)` materialises the
 dense matrix (so the whole `LinearAlgebra` API works pointwise via `A(p)`).
+
+The coefficient blocks may be **any `AbstractMatrix` backend** (`Matrix`, sparse,
+`StaticArrays`, a wrapper over another ecosystem's matrix type, …), not only
+`Base.Matrix`: the algebra and the factorizations consume them generically and
+compute correct results. Computed/factorized blocks may be returned as a dense
+`Matrix` (factorizations densify for LAPACK) — correctness is guaranteed, exotic
+block-type *preservation* is not.
 """
 struct ParaMatrix{T,S<:AbstractMatrix{T},C<:FunctionClass} <: AbstractParaMatrix{T,S,C}
     coeffs::Vector{S}
