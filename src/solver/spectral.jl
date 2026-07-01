@@ -396,7 +396,7 @@ end
 # a hard, partly-open problem: in m-D, para-unitary FIR matrices do NOT factor into
 # elementary (delay+rotation) lattice blocks (the 1-D lossless lattice is not a
 # complete characterization), and there is no multidimensional spectral-factorization
-# theorem. See the GitHub issue. The sampled `eigen`/`svd` DO support ProductClass.
+# theorem. Tracked in issue #32. The sampled `eigen`/`svd` DO support ProductClass.
 function _multivar_unavailable(fn)
     return error(
         "$fn: parameterized factorization of a MULTI-parameter (ProductClass) object is " *
@@ -404,7 +404,7 @@ function _multivar_unavailable(fn)
         "variables para-unitary FIR matrices do not factor into elementary delay+rotation " *
         "blocks and there is no multidimensional spectral-factorization theorem " *
         "[Zhou, Do & Kovačević, IEEE Trans. Image Process. 14(6):760–769, 2005; " *
-        "Geronimo & Woerdeman, Ann. of Math. 160(3):839–906, 2004]. " *
+        "Geronimo & Woerdeman, Ann. of Math. 160(3):839–906, 2004; tracked in issue #32]. " *
         "Use the SAMPLED `eigen`/`svd` (which do support ProductClass), or factorize " *
         "pointwise via `A(p)`.",
     )
