@@ -118,3 +118,24 @@ end
         end
     end
 end
+
+@testset "para_svd ordering: :analytic (smooth branches) vs :majorised (per-θ descending)" begin
+    # σ crossing: σ = 1.5 ± cos2πθ cross at θ = ¼, ¾ (nsample=130 avoids those grid points)
+    U0 = _constunitary(2, 3)
+    V0 = _constunitary(2, 4)
+    A = U0 * _posdiag([1.5, 1.5], [1.0, -1.0]) * para(V0)
+    Fa = para_svd(A; order=8, nsample=130, ordering=:analytic)
+    Fm = para_svd(A; order=8, nsample=130, ordering=:majorised)
+    for θ in RNG_PTS
+        # analytic bands are smooth ⇒ fit exactly; the majorised bands 1.5±|cos| have a
+        # kink ⇒ Gibbs, so its set is only checked loosely.
+        @test sort(real(diag(Fa.S(θ))); rev=true) ≈ svdvals(A(θ)) atol = 1e-5
+        @test sort(real(diag(Fm.S(θ))); rev=true) ≈ svdvals(A(θ)) atol = 0.1
+        dm = real(diag(Fm.S(θ)))
+        @test dm[1] ≥ dm[2] - 1e-2                                              # majorised descending
+    end
+    # analytic band 1 follows the smooth 1.5+cos branch (the SMALLER value past the crossing)
+    @test real(diag(Fa.S(0.5)))[1] < 1.0
+    @test real(diag(Fm.S(0.5)))[1] > 2.0                                        # majorised = the max
+    @test_throws ArgumentError para_svd(A; ordering=:bogus)
+end

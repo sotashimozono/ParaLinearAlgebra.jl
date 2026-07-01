@@ -112,3 +112,21 @@ end
         end
     end
 end
+
+@testset "para_eigen ordering: :analytic vs :majorised (band crossing)" begin
+    U0 = _constunitary(2, 3)
+    H = U0 * _realdiag([0.0, 0.0], [1.0, -1.0]) * para(U0)   # bands ±cos2πθ, cross at ¼, ¾
+    Fa = para_eigen(H; order=8, nsample=130, ordering=:analytic)
+    Fm = para_eigen(H; order=8, nsample=130, ordering=:majorised)
+    for θ in RNG_PTS
+        # analytic bands smooth ⇒ exact fit; majorised bands ±|cos| have kinks ⇒ Gibbs
+        @test sort(real(diag(Fa.D(θ)))) ≈ eigvals(Hermitian(Matrix(H(θ)))) atol = 1e-5
+        @test sort(real(diag(Fm.D(θ)))) ≈ eigvals(Hermitian(Matrix(H(θ)))) atol = 0.1
+        dm = real(diag(Fm.D(θ)))
+        @test dm[1] ≥ dm[2] - 1e-2                            # majorised: descending
+    end
+    # analytic band 1 tracks the θ=0-smallest vector (λ=-cos ⇒ −1 at θ=0); majorised = the max (+1)
+    @test real(diag(Fa.D(0.0)))[1] < -0.5
+    @test real(diag(Fm.D(0.0)))[1] > 0.5
+    @test_throws ArgumentError para_eigen(H; ordering=:bogus)
+end
