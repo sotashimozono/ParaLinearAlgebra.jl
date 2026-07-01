@@ -60,7 +60,8 @@ include("utils/utils.jl")
 # core
 export FunctionClass,
     RingClass, basis, basis_deriv, basis_gram, basis_integral, nbasis, powers
-export ParaMatrix, evaluate, evaluate_deriv, coefficients, function_class, coeff, nterms
+export AbstractParaMatrix, ParaMatrix, evaluate, evaluate_deriv
+export coefficients, function_class, coeff, nterms
 export BlockParaMatrix, nparams
 export integral
 export paraeye, ⊗, ⊕, directsum

@@ -60,10 +60,10 @@ The para-adjoint (para-conjugate) `Ã(z) = A(1/z̄)†` of a Laurent ParaMatrix:
 unit circle it equals the conjugate-transpose, `para(A)(θ) = A(θ)'`. The
 coefficient rule is `Ãₘ = (A₋ₘ)†` (the power window negates). Also reachable as `A'`.
 """
-function para(A::ParaMatrix{T,S,<:Laurent}) where {T,S}
-    c = A.class
+function para(A::AbstractParaMatrix{T,S,<:Laurent}) where {T,S}
+    c = function_class(A)
     nc = Laurent(-c.hi, -c.lo)
-    return ParaMatrix([_adj(coeff(A, -m)) for m in powers(nc)], nc)
+    return _rebuild(A, [_adj(coeff(A, -m)) for m in powers(nc)], nc)
 end
 
 """
@@ -80,8 +80,8 @@ The para-Hermitian part `(A + para(A))/2` (so `isparahermitian` holds for the
 result). Requires a symmetric window `Laurent(-L, L)` so that `A` and `para(A)`
 share a class; this is the natural domain of para-Hermitian objects.
 """
-function parahermitianpart(A::ParaMatrix{T,S,<:Laurent}) where {T,S}
-    c = A.class
+function parahermitianpart(A::AbstractParaMatrix{T,S,<:Laurent}) where {T,S}
+    c = function_class(A)
     c.lo == -c.hi || throw(
         ArgumentError(
             "parahermitianpart needs a symmetric window Laurent(-L,L); got $(c) " *
@@ -92,7 +92,7 @@ function parahermitianpart(A::ParaMatrix{T,S,<:Laurent}) where {T,S}
 end
 
 # on the circle the conjugate-transpose IS the para-adjoint
-Base.adjoint(A::ParaMatrix{T,S,<:Laurent}) where {T,S} = para(A)
+Base.adjoint(A::AbstractParaMatrix{T,S,<:Laurent}) where {T,S} = para(A)
 
 # predicates (Laurent / on-the-circle notions; surfaced under the LinearAlgebra names)
 """
@@ -100,10 +100,10 @@ Base.adjoint(A::ParaMatrix{T,S,<:Laurent}) where {T,S} = para(A)
 
 Whether `para(A) == A` (Hermitian on the unit circle).
 """
-function isparahermitian(A::ParaMatrix{T,S,<:Laurent}; tol=1e-9) where {T,S}
+function isparahermitian(A::AbstractParaMatrix{T,S,<:Laurent}; tol=1e-9) where {T,S}
     Ã = para(A)
-    Ã.class == A.class || return false
-    return all(norm(A.coeffs[j] - Ã.coeffs[j]) ≤ tol for j in 1:nterms(A))
+    function_class(Ã) == function_class(A) || return false
+    return all(norm(coefficients(A)[j] - coefficients(Ã)[j]) ≤ tol for j in 1:nterms(A))
 end
 
 """
@@ -113,10 +113,10 @@ Whether `para(A) * A` is the identity para-matrix — i.e. **left** para-unitary
 (`Aᴴ(θ)A(θ) = I` on the circle). For square `A` this is two-sided unitarity; for
 a tall `A` it is column-isometry only (and `inv` is then invalid).
 """
-function isparaunitary(A::ParaMatrix{T,S,<:Laurent}; tol=1e-9) where {T,S}
+function isparaunitary(A::AbstractParaMatrix{T,S,<:Laurent}; tol=1e-9) where {T,S}
     P = para(A) * A
     return norm(coeff(P, 0) - I) ≤ tol &&
-           all(norm(coeff(P, k)) ≤ tol for k in powers(P.class) if k != 0)
+           all(norm(coeff(P, k)) ≤ tol for k in powers(function_class(P)) if k != 0)
 end
 
 """
@@ -125,7 +125,7 @@ end
 Whether the minimum eigenvalue of `A(θ)` is `≥ tol` (default `-1e-9`, a
 numerically tolerant PSD check) for all sampled `θ` on the circle.
 """
-function ispositive(A::ParaMatrix{T,S,<:Laurent}; nsample=64, tol=-1e-9) where {T,S}
+function ispositive(A::AbstractParaMatrix{T,S,<:Laurent}; nsample=64, tol=-1e-9) where {T,S}
     return all(
         minimum(real, eigvals(Hermitian(Matrix(A(t))))) ≥ tol for
         t in range(0, 1; length=nsample + 1)[1:nsample]
@@ -139,21 +139,23 @@ The H∞ / sup operator norm `max_θ ‖A(θ)‖₂` over the circle (the larges
 value of `A(θ)` maximised on an `nsample` grid) — the gain of `A` as a
 multiplication operator. Equals `1` for a para-unitary `A`.
 """
-function LinearAlgebra.opnorm(A::ParaMatrix{T,S,<:Laurent}; nsample::Int=256) where {T,S}
+function LinearAlgebra.opnorm(
+    A::AbstractParaMatrix{T,S,<:Laurent}; nsample::Int=256
+) where {T,S}
     return maximum(opnorm(Matrix(A(t))) for t in range(0, 1; length=nsample + 1)[1:nsample])
 end
 
-function LinearAlgebra.ishermitian(A::ParaMatrix{T,S,<:Laurent}; kw...) where {T,S}
+function LinearAlgebra.ishermitian(A::AbstractParaMatrix{T,S,<:Laurent}; kw...) where {T,S}
     return isparahermitian(A; kw...)
 end
-function LinearAlgebra.isposdef(A::ParaMatrix{T,S,<:Laurent}; kw...) where {T,S}
+function LinearAlgebra.isposdef(A::AbstractParaMatrix{T,S,<:Laurent}; kw...) where {T,S}
     return ispositive(A; kw...)
 end
 
 # det(A(z)) — a scalar Laurent polynomial — via evaluate on the circle + inverse DFT
-function LinearAlgebra.det(A::ParaMatrix{T,S,<:Laurent}) where {T,S}
+function LinearAlgebra.det(A::AbstractParaMatrix{T,S,<:Laurent}) where {T,S}
     d = size(A, 1)
-    c = A.class
+    c = function_class(A)
     lo, hi = d * c.lo, d * c.hi
     M = hi - lo + 1
     CT = complex(float(T))
@@ -166,10 +168,10 @@ end
 # inverse is rational (adj(A)/det(A)) — return its best `Laurent(order)` fit
 # (convergent when A⁻¹ is analytic on the circle, i.e. det A(θ) ≠ 0 there) and
 # WARN if the fit does not converge. Use `pinv` for the sampled (pointwise) form.
-function Base.inv(A::ParaMatrix{T,S,<:Laurent}; order::Int=8, tol=1e-9) where {T,S}
+function Base.inv(A::AbstractParaMatrix{T,S,<:Laurent}; order::Int=8, tol=1e-9) where {T,S}
     size(A, 1) == size(A, 2) || throw(DimensionMismatch("inv needs a square ParaMatrix"))
     isparaunitary(A; tol=tol) && return para(A)
-    x, info = para_solve(A, paraeye(size(A, 1), T, A.class); order=order)
+    x, info = para_solve(A, paraeye(size(A, 1), T, function_class(A)); order=order)
     info.converged || @warn(
         "inv: A⁻¹ is rational (A is not para-unitary); the Laurent(order=$order) fit " *
             "has residual $(info.residual). Raise `order`, or use `pinv` for the sampled inverse.",

@@ -5,7 +5,7 @@
 
 The left para-Hermitian Gram `Ã·A` (PSD on the circle).
 """
-para_gram(A::ParaMatrix{T,S,<:Laurent}) where {T,S} = para(A) * A
+para_gram(A::AbstractParaMatrix{T,S,<:Laurent}) where {T,S} = para(A) * A
 
 """
     spectral_factor(G; N=24) -> ParaMatrix
@@ -20,8 +20,8 @@ factor `M` (class `Analytic(hi)`) with `G = M · para(M)` on the circle.
 differentiable** in the input's coefficients — both the canonicalization gauge
 (`R`/`L`) and the para-unitary `Q`.
 """
-function spectral_factor(G::ParaMatrix{T,S,<:Laurent}; N::Int=24) where {T,S}
-    c = G.class
+function spectral_factor(G::AbstractParaMatrix{T,S,<:Laurent}; N::Int=24) where {T,S}
+    c = function_class(G)
     L = c.hi
     c.lo == -L || error("spectral_factor needs a symmetric window, got $(c)")
     N ≥ L || throw(
@@ -61,7 +61,7 @@ The leading eigenpair functions `λ(θ), v(θ)` of a parameterized (transfer)
 matrix `E`, sampled on the circle — the per-θ Perron environment of an iMPS.
 For a single point use `eigen(E(θ))` directly.
 """
-function leading_eigen(E::ParaMatrix{T,S,<:Laurent}; nsample::Int=128) where {T,S}
+function leading_eigen(E::AbstractParaMatrix{T,S,<:Laurent}; nsample::Int=128) where {T,S}
     CT = complex(float(T))
     ts = _circle(nsample)
     λs = Vector{CT}(undef, nsample)
@@ -92,7 +92,7 @@ the rational-inverse `order`, which `@warn`s if it does not converge). `R` is th
 exact gauge to absorb when canonicalizing a parameterized tensor.
 """
 function para_qr(
-    A::ParaMatrix{T,S,<:Laurent}; N::Int=24, order::Int=12, rankatol::Real=1e-8
+    A::AbstractParaMatrix{T,S,<:Laurent}; N::Int=24, order::Int=12, rankatol::Real=1e-8
 ) where {T,S}
     m, n = size(A)
     m ≥ n ||
@@ -131,7 +131,7 @@ mirror of [`para_qr`](@ref): `L` is obtained **exactly** as the spectral factor 
 right-canonicalizing a parameterized tensor.
 """
 function para_lq(
-    A::ParaMatrix{T,S,<:Laurent}; N::Int=24, order::Int=12, rankatol::Real=1e-8
+    A::AbstractParaMatrix{T,S,<:Laurent}; N::Int=24, order::Int=12, rankatol::Real=1e-8
 ) where {T,S}
     m, n = size(A)
     n ≥ m ||
@@ -223,7 +223,7 @@ values over the grid; if `mingap < gaptol` a crossing/near-degeneracy is reporte
 `nsample` defaults to `max(64, 16·order)`.
 """
 function para_svd(
-    A::ParaMatrix{T,Sm,<:Laurent};
+    A::AbstractParaMatrix{T,Sm,<:Laurent};
     order::Int=12,
     nsample::Int=0,
     tol::Real=0,
@@ -329,7 +329,7 @@ fit order to a residual target; `mingap` flags a crossing/near-degeneracy (`@war
     eigenvalue-crossing / degeneracy / ordering-convention cases not yet handled.
 """
 function para_eigen(
-    H::ParaMatrix{T,S,<:Laurent};
+    H::AbstractParaMatrix{T,S,<:Laurent};
     order::Int=12,
     nsample::Int=0,
     tol::Real=0,
@@ -450,7 +450,7 @@ no vector gauge-fixing), so it composes under reverse-mode AD. Approximate — f
 `max(64, 16·order)`.
 """
 function para_svdvals(
-    A::ParaMatrix{T,S,<:Laurent}; order::Int=12, nsample::Int=0
+    A::AbstractParaMatrix{T,S,<:Laurent}; order::Int=12, nsample::Int=0
 ) where {T,S}
     r = minimum(size(A))
     N = nsample > 0 ? nsample : max(64, 16 * order)
@@ -469,7 +469,7 @@ counterpart of `para_eigen` for just the bands. Approximate (raise `order` at
 crossings); `@warn`s if `H` is not para-Hermitian.
 """
 function para_eigvals(
-    H::ParaMatrix{T,S,<:Laurent}; order::Int=12, nsample::Int=0
+    H::AbstractParaMatrix{T,S,<:Laurent}; order::Int=12, nsample::Int=0
 ) where {T,S}
     n = size(H, 1)
     n == size(H, 2) ||
@@ -487,7 +487,7 @@ end
 # singular/eigen gauge-fixing). Give a CLEAR error under AD instead of a cryptic
 # `llvmcall` failure, pointing at what IS differentiable.
 function ChainRulesCore.rrule(
-    ::typeof(para_svd), A::ParaMatrix{T,S,<:Laurent}; kw...
+    ::typeof(para_svd), A::AbstractParaMatrix{T,S,<:Laurent}; kw...
 ) where {T,S}
     return para_svd(A; kw...),
     _ -> error(
@@ -498,7 +498,7 @@ function ChainRulesCore.rrule(
     )
 end
 function ChainRulesCore.rrule(
-    ::typeof(para_eigen), H::ParaMatrix{T,S,<:Laurent}; kw...
+    ::typeof(para_eigen), H::AbstractParaMatrix{T,S,<:Laurent}; kw...
 ) where {T,S}
     return para_eigen(H; kw...),
     _ -> error(
@@ -538,24 +538,24 @@ function _multivar_unavailable(fn)
     )
 end
 
-function spectral_factor(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+function spectral_factor(::AbstractParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
     return _multivar_unavailable("spectral_factor")
 end
-function para_qr(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+function para_qr(::AbstractParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
     return _multivar_unavailable("para_qr")
 end
-function para_lq(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+function para_lq(::AbstractParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
     return _multivar_unavailable("para_lq")
 end
-function para_svd(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+function para_svd(::AbstractParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
     return _multivar_unavailable("para_svd")
 end
-function para_eigen(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+function para_eigen(::AbstractParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
     return _multivar_unavailable("para_eigen")
 end
-function para_svdvals(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+function para_svdvals(::AbstractParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
     return _multivar_unavailable("para_svdvals")
 end
-function para_eigvals(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+function para_eigvals(::AbstractParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
     return _multivar_unavailable("para_eigvals")
 end
