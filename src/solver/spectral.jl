@@ -209,6 +209,12 @@ they fit cleanly. `U,V` are good **iff** the singular values stay separated and 
 per-band Berry phase `winding` vanishes; otherwise the factor is not a band-limited
 Laurent and `residual = max_θ‖A − U S V'‖` is large (a `@warn` fires).
 
+`ordering` selects the band convention (the two are incompatible at crossings):
+`:analytic` (default) branch-tracks the singular vectors ⇒ **smooth** bands that
+may cross (best for fitting); `:majorised` keeps the per-θ **descending** sort
+(spectral majorisation, `σ₁(θ) ≥ σ₂(θ) ≥ …` ∀θ) ⇒ power-ordered bands with **kinks**
+at crossings.
+
 Refinement knobs/diagnostics: with `tol > 0` the `order` is grown (re-fitting the
 gauge-fixed samples) until `residual ≤ tol` or `order = maxorder`, and the order
 actually used is returned. `mingap` is the smallest gap between adjacent singular
@@ -223,7 +229,10 @@ function para_svd(
     tol::Real=0,
     maxorder::Int=64,
     gaptol::Real=1e-4,
+    ordering::Symbol=:analytic,
 ) where {T,Sm}
+    ordering in (:analytic, :majorised) ||
+        throw(ArgumentError("ordering must be :analytic or :majorised; got :$ordering"))
     m, n = size(A)
     r = min(m, n)
     N = nsample > 0 ? nsample : max(64, 16 * order)
@@ -233,17 +242,20 @@ function para_svd(
     Ss = Vector{Vector{Float64}}(undef, N)
     Vs = Vector{Matrix{CT}}(undef, N)
     for (i, t) in enumerate(grid)
-        F = svd(Matrix(A(t)))
+        F = svd(Matrix(A(t)))                # σ descending (already majorised per θ)
         Us[i] = F.U[:, 1:r]
         Ss[i] = F.S[1:r]
         Vs[i] = F.V[:, 1:r]
     end
-    # branch-track ordering + parallel-transport phase gauge (same phase on U and V)
+    # :analytic branch-tracks (smooth bands); :majorised keeps the per-θ descending
+    # sort. Either way, parallel-transport the vector phase (common on U and V).
     for i in 2:N
-        p = _svdmatch(Us[i - 1], Us[i])
-        Us[i] = Us[i][:, p]
-        Vs[i] = Vs[i][:, p]
-        Ss[i] = Ss[i][p]
+        if ordering === :analytic
+            p = _svdmatch(Us[i - 1], Us[i])
+            Us[i] = Us[i][:, p]
+            Vs[i] = Vs[i][:, p]
+            Ss[i] = Ss[i][p]
+        end
         for k in 1:r
             ph = dot(Us[i - 1][:, k], Us[i][:, k])
             ph = iszero(ph) ? one(CT) : ph / abs(ph)
@@ -306,6 +318,11 @@ large and a `@warn` fires. Unlike `para_svd` the eigenvalues are real and may be
 negative, and the same `U` appears on both sides (so reconstruction is invariant
 to each eigenvector's phase).
 
+`ordering` (`:analytic` default | `:majorised`) selects the band convention, as in
+[`para_svd`](@ref): `:analytic` branch-tracks smooth bands (may cross); `:majorised`
+keeps the per-θ **descending** sort (kinked at crossings). `tol`/`maxorder` grow the
+fit order to a residual target; `mingap` flags a crossing/near-degeneracy (`@warn`).
+
 !!! note "Known limitations (scientific scope)"
     Single parameter (Laurent) only; assumes `H` para-Hermitian (else the Hermitian
     part at each θ is used, with a warning). See the `TODO`s in the source for the
@@ -318,7 +335,10 @@ function para_eigen(
     tol::Real=0,
     maxorder::Int=64,
     gaptol::Real=1e-4,
+    ordering::Symbol=:analytic,
 ) where {T,S}
+    ordering in (:analytic, :majorised) ||
+        throw(ArgumentError("ordering must be :analytic or :majorised; got :$ordering"))
     n = size(H, 1)
     n == size(H, 2) ||
         throw(DimensionMismatch("para_eigen needs a square H; got $(size(H))"))
@@ -337,21 +357,27 @@ function para_eigen(
         Us[i] = F.vectors
         Ds[i] = F.values
     end
-    # Branch-track the bands by eigenvector overlap, then parallel-transport each
-    # eigenvector's phase for continuity (the eigenvalue-phase cancels in U D U').
+    if ordering === :majorised               # per-θ DESCENDING sort (spectral majorisation)
+        for i in 1:N
+            Us[i] = Us[i][:, n:-1:1]
+            Ds[i] = Ds[i][n:-1:1]
+        end
+    end
+    # :analytic branch-tracks the bands by eigenvector overlap (smooth bands that may
+    # cross); :majorised keeps the per-θ descending sort (power-ordered, kinked at
+    # crossings). Either way, parallel-transport each eigenvector's phase (the
+    # eigenvalue-phase cancels in U D U').
     # TODO: at band CROSSINGS / degeneracies the eigenvectors rotate arbitrarily fast
-    #   (Wedin/Davis–Kahan: gap→0) and overlap-matching can mis-track; a proper
-    #   analytic continuation through crossings is not done. TODO: expose an
-    #   ordering convention (analytic branches vs ascending/spectrally-majorised) —
-    #   currently analytic-branch via tracking. TODO: degenerate bands leave the
-    #   eigenvector gauge ambiguous within the eigenspace (only the subspace is
-    #   defined); per-band fitting is then unreliable. TODO: multi-parameter
-    #   (ProductClass) PEVD — none here (the 1-D elementary-factor structure that
-    #   makes this work has no general multivariate analogue).
+    #   (Wedin/Davis–Kahan: gap→0) and overlap-matching can mis-track; a proper analytic
+    #   continuation through crossings is not done. TODO: degenerate bands leave the
+    #   eigenvector gauge ambiguous within the eigenspace (only the subspace is defined);
+    #   per-band fitting is then unreliable. TODO: multivariate (ProductClass) PEVD (open).
     for i in 2:N
-        p = _svdmatch(Us[i - 1], Us[i])
-        Us[i] = Us[i][:, p]
-        Ds[i] = Ds[i][p]
+        if ordering === :analytic
+            p = _svdmatch(Us[i - 1], Us[i])
+            Us[i] = Us[i][:, p]
+            Ds[i] = Ds[i][p]
+        end
         for k in 1:n
             ph = dot(Us[i - 1][:, k], Us[i][:, k])
             ph = iszero(ph) ? one(CT) : ph / abs(ph)
@@ -490,8 +516,9 @@ end
 #   argmax matching + phase normalization) — differentiating them raises a clear error.
 #   The gauge-invariant VALUE functions ARE differentiable: use `para_svdvals` /
 #   `para_eigvals`. TODO: an AD-able full para_svd/para_eigen needs a smooth-gauge
-#   formulation (open). TODO: ordering convention (analytic vs spectrally-majorised) and
-#   crossing passage for `para_svd`/`para_eigen` (see their in-source TODOs).
+#   formulation (open). Ordering convention (analytic vs spectrally-majorised) is now a
+#   first-class `ordering` kwarg; TODO: robust crossing PASSAGE (tracking through exact
+#   degeneracies) for `para_svd`/`para_eigen` (see their in-source TODOs).
 #
 # For ≥2 parameters the parameterized factorizations are unavailable BY DESIGN — it is
 # a hard, partly-open problem: in m-D, para-unitary FIR matrices do NOT factor into
