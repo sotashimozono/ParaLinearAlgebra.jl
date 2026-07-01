@@ -62,3 +62,26 @@ end
         @test _flat(Zygote.gradient(L, c0)[1], c0) ≈ _fdgrad(L, c0) atol = 1e-5
     end
 end
+
+# spectral_factor is mutation-free ⇒ AD flows through the ChainRules `cholesky` rule.
+# The canonicalization R/L gauge is therefore differentiable AS A spectral_factor
+# COMPOSITION (no `inv`): R = para(spectral_factor(para(A)·A)), L = spectral_factor(A·para(A)).
+# (`para_qr`/`para_lq` as functions are NOT AD-transparent — they also build the
+# para-unitary `Q` via the rational `inv`; differentiate the composition directly.)
+# Real coeffs ⇒ real gradient, matching the real-direction finite difference.
+@testset "Zygote ∘ spectral_factor + R/L canonicalization gauge" begin
+    for seed in SEEDS
+        c0 = [
+            Matrix{Float64}(I, 2, 2),                          # A = I + small ⇒ Gram PD
+            0.2 .* randn(MersenneTwister(seed), 2, 2),
+            0.2 .* randn(MersenneTwister(seed + 1), 2, 2),
+        ]
+        mk(c) = ParaMatrix(c, Laurent(-1, 1))
+        Lsf(c) = sum(abs2, spectral_factor(para(mk(c)) * mk(c); N=8)(0.3))
+        @test _flat(Zygote.gradient(Lsf, c0)[1], c0) ≈ _fdgrad(Lsf, c0) atol = 1e-5
+        Lr(c) = sum(abs2, para(spectral_factor(para(mk(c)) * mk(c); N=8))(0.3))  # R gauge
+        @test _flat(Zygote.gradient(Lr, c0)[1], c0) ≈ _fdgrad(Lr, c0) atol = 1e-5
+        Ll(c) = sum(abs2, spectral_factor(mk(c) * para(mk(c)); N=8)(0.3))        # L gauge
+        @test _flat(Zygote.gradient(Ll, c0)[1], c0) ≈ _fdgrad(Ll, c0) atol = 1e-5
+    end
+end

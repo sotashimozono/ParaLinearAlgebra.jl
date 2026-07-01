@@ -13,6 +13,13 @@ para_gram(A::ParaMatrix{T,S,<:Laurent}) where {T,S} = para(A) * A
 Spectral factorization of a symmetric para-Hermitian PD `G` via Bauer's method
 (Cholesky of the block-Toeplitz `T[i,j] = G_{i-j}`). Returns the analytic outer
 factor `M` (class `Analytic(hi)`) with `G = M · para(M)` on the circle.
+
+**Differentiable**: the block-Toeplitz is built mutation-free, so reverse-mode AD
+(e.g. Zygote) flows through the `cholesky` rule. The canonicalization R/L gauge is
+therefore differentiable **as a `spectral_factor` composition** —
+`R = para(spectral_factor(para(A)·A))`, `L = spectral_factor(A·para(A))`.
+(Differentiate that composition directly; `para_qr`/`para_lq` as functions are not
+AD-transparent — they also form the para-unitary `Q` via the rational `inv`.)
 """
 function spectral_factor(G::ParaMatrix{T,S,<:Laurent}; N::Int=24) where {T,S}
     c = G.class
@@ -26,13 +33,12 @@ function spectral_factor(G::ParaMatrix{T,S,<:Laurent}; N::Int=24) where {T,S}
     )
     d = size(G, 1)
     TT = float(T)
-    Tb = zeros(TT, (N + 1) * d, (N + 1) * d)
-    for i in 0:N, j in 0:N
-        m = i - j
-        if -L ≤ m ≤ L
-            Tb[(i * d + 1):((i + 1) * d), (j * d + 1):((j + 1) * d)] = coeff(G, m)
-        end
-    end
+    # block-Toeplitz `T[i,j] = G_{i-j}`, built mutation-free (hcat/vcat of blocks) so
+    # it is AD-transparent — `spectral_factor` (and `para_qr`/`para_lq` built on it)
+    # then differentiate through the ChainRules `cholesky` rule.
+    Z = zeros(TT, d, d)
+    blkin(m) = (-L ≤ m ≤ L) ? Matrix{TT}(coeff(G, m)) : Z
+    Tb = reduce(vcat, [reduce(hcat, [blkin(i - j) for j in 0:N]) for i in 0:N])
     Lc = try
         cholesky(Hermitian(Tb)).L
     catch e
@@ -376,4 +382,46 @@ function para_eigen(
         maxlog = 3,
     )
     return (; U=U, D=D, residual=residual, winding=winding, mingap=mingap, order=ord)
+end
+
+# --- multivariate (multi-parameter) factorization: unavailable, and genuinely hard ---
+# TODO: AD — only `spectral_factor` and the `para_qr`/`para_lq` gauge factors (`R`,`L`)
+#   are differentiable so far. Full `para_qr`/`para_lq` (the para-unitary `Q`, via the
+#   rational `inv`) and `para_svd`/`para_eigen` are NOT yet AD-transparent: `inv`'s
+#   Laurent-fit and the (non-smooth) singular/eigen gauge-fixing need a hand-written
+#   rrule. TODO: ordering convention (analytic vs spectrally-majorised) and crossing
+#   passage for `para_svd`/`para_eigen` (see their in-source TODOs).
+#
+# For ≥2 parameters the parameterized factorizations are unavailable BY DESIGN — it is
+# a hard, partly-open problem: in m-D, para-unitary FIR matrices do NOT factor into
+# elementary (delay+rotation) lattice blocks (the 1-D lossless lattice is not a
+# complete characterization), and there is no multidimensional spectral-factorization
+# theorem. See the GitHub issue. The sampled `eigen`/`svd` DO support ProductClass.
+function _multivar_unavailable(fn)
+    return error(
+        "$fn: parameterized factorization of a MULTI-parameter (ProductClass) object is " *
+        "currently unavailable, and it is a difficult (partly open) problem — in ≥2 " *
+        "variables para-unitary FIR matrices do not factor into elementary delay+rotation " *
+        "blocks and there is no multidimensional spectral-factorization theorem " *
+        "[Zhou, Do & Kovačević, IEEE Trans. Image Process. 14(6):760–769, 2005; " *
+        "Geronimo & Woerdeman, Ann. of Math. 160(3):839–906, 2004]. " *
+        "Use the SAMPLED `eigen`/`svd` (which do support ProductClass), or factorize " *
+        "pointwise via `A(p)`.",
+    )
+end
+
+function spectral_factor(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+    return _multivar_unavailable("spectral_factor")
+end
+function para_qr(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+    return _multivar_unavailable("para_qr")
+end
+function para_lq(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+    return _multivar_unavailable("para_lq")
+end
+function para_svd(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+    return _multivar_unavailable("para_svd")
+end
+function para_eigen(::ParaMatrix{T,S,<:ProductClass}; kw...) where {T,S}
+    return _multivar_unavailable("para_eigen")
 end

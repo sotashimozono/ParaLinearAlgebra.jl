@@ -46,3 +46,15 @@ end
     @test Az(0.0) ≈ ComplexF64[1 0; 0 0]                               # rank 1 at θ = 0
     @test_throws ErrorException para_qr(Az)                            # Gram not PD ⇒ no QR
 end
+
+@testset "multivariate (ProductClass) parameterized factorization is gated" begin
+    # ≥2 parameters: parameterized factorization is unavailable by design (hard/open);
+    # the methods must error clearly. (The SAMPLED eigen/svd DO support ProductClass.)
+    pc = ProductClass(Laurent(-1, 1), Laurent(-1, 1))
+    A = ParaMatrix([randn(MersenneTwister(i), ComplexF64, 2, 2) for i in 1:nbasis(pc)], pc)
+    @test_throws ErrorException spectral_factor(A)
+    @test_throws ErrorException para_qr(A)
+    @test_throws ErrorException para_lq(A)
+    @test_throws ErrorException para_svd(A)
+    @test_throws ErrorException para_eigen(A)
+end
