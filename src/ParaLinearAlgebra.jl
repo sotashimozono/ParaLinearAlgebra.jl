@@ -13,7 +13,12 @@ function type:
                `A(p)`, ring ops, AD rrules).
 - `classes/` — concrete function types as plug-ins: [`Fourier`](@ref) (ansatz),
                [`Laurent`](@ref)/[`Analytic`](@ref) (ring + para-adjoint),
-               [`Polynomial`](@ref), [`ProductClass`](@ref).
+               [`Polynomial`](@ref), [`ProductClass`](@ref), and
+               [`FunctionBasis`](@ref) (an ansatz from an arbitrary list of scalar
+               functions — orthogonal polynomials, special functions, any
+               callables). A weak-dependency extension bridges the
+               [Polynomials.jl](https://github.com/JuliaMath/Polynomials.jl)
+               ecosystem ([`polynomial_basis`](@ref)/[`monomialize`](@ref)).
 - `solver/`  — factorizations (`eigen`/`svd`/`qr`/`lq`/`lu`/`pinv` dispatch on
                `ParaMatrix`) plus circle/`Laurent`-parametric algorithms
                ([`spectral_factor`](@ref), [`para_gram`](@ref),
@@ -45,6 +50,7 @@ include("core/chainrules.jl")
 include("classes/fourier.jl")
 include("classes/laurent.jl")
 include("classes/polynomial.jl")
+include("classes/function_basis.jl")
 include("classes/product.jl")
 include("core/blockparamatrix.jl")
 
@@ -66,7 +72,9 @@ export BlockParaMatrix, nparams
 export integral
 export paraeye, ⊗, ⊕, directsum
 # classes
-export Fourier, Laurent, Analytic, Polynomial, ProductClass
+export Fourier, Laurent, Analytic, Polynomial, ProductClass, FunctionBasis
+# extension hooks (methods supplied by the Polynomials.jl weak-dependency extension)
+export polynomial_basis, monomialize
 # para-structure
 export para, paraconj, parahermitianpart, isparahermitian, isparaunitary, ispositive
 # solver — factorizations dispatch on the STANDARD verbs (eigen/svd/qr/lq/lu/
